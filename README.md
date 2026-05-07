@@ -1,6 +1,6 @@
 # SQL Practice Generator
 
-A single-file, browser-based SQL practice tool. Describe the SQL concept you want to practice in plain English, and the app generates a realistic dataset (200+ rows) and a scenario for you to solve.
+A single-file, browser-based SQL practice tool with a **real PostgreSQL database** running in the browser. Describe the SQL concept you want to practice in plain English, and the app generates a realistic dataset (200+ rows) and a scenario for you to solve — using the same syntax you'd see in actual interviews.
 
 ## How it works
 
@@ -12,18 +12,21 @@ A single-file, browser-based SQL practice tool. Describe the SQL concept you wan
 
 ## Features
 
-- Runs SQLite entirely in the browser via [sql.js](https://sql.js.org) — no backend, no installation
+- Real PostgreSQL running in the browser via [PGlite](https://pglite.dev) (Postgres compiled to WASM) — interview-relevant syntax with full date functions (`EXTRACT`, `DATE_TRUNC`, `INTERVAL`, etc.), `ILIKE`, `JSONB`, arrays, and lateral joins
+- No backend, no installation — works offline once loaded
 - 200+ rows per table with realistic value distributions (skewed categories, outliers, ties, NULLs) so queries produce non-trivial results
 - Click any table card in the schema panel to instantly `SELECT * LIMIT 20` from it
 - API key saved to `localStorage` — enter it once and it persists across sessions
 
 ## Setup
 
-No install required. Just open `sql_practice.html` in any modern browser:
+No install required. Just open `index.html` in any modern browser:
 
 ```bash
-open sql_practice.html
+open index.html
 ```
+
+> **Note:** PGlite loads its Postgres WASM binary from CDN on first use (~3MB). After that the database runs entirely in your browser tab.
 
 Then paste your [Anthropic API key](https://console.anthropic.com/) into the field in the top-right corner. The key never leaves your browser — it is sent directly to `api.anthropic.com` and stored only in your browser's `localStorage`.
 
@@ -40,5 +43,5 @@ Then paste your [Anthropic API key](https://console.anthropic.com/) into the fie
 
 ## Requirements
 
-- A modern browser (Chrome, Firefox, Safari, Edge)
+- A modern browser that supports ES modules and WASM (Chrome, Firefox, Safari, Edge — all current versions)
 - An Anthropic API key — the app uses `claude-sonnet-4-6` for table generation

@@ -3,7 +3,6 @@
 <head>
 <meta charset="UTF-8" />
 <title>Custom SQL Practice</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js"></script>
 <style>
   :root {
     --bg: #0f1419;
@@ -375,7 +374,9 @@
   </div>
 </div>
 
-<script>
+<script type="module">
+import { PGlite } from "https://cdn.jsdelivr.net/npm/@electric-sql/pglite/dist/index.js";
+
 const $ = (id) => document.getElementById(id);
 const apiKeyInput = $('apiKey');
 apiKeyInput.value = localStorage.getItem('anthropic_api_key') || '';
@@ -383,12 +384,15 @@ apiKeyInput.addEventListener('input', () => {
   localStorage.setItem('anthropic_api_key', apiKeyInput.value.trim());
 });
 
-let SQL = null;
 let db = null;
 let currentProblem = null;
-
-initSqlJs({ locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/${f}` })
-  .then(s => { SQL = s; });
+let dbReady = (async () => {
+  $('genStatus').innerHTML = '<span class="loading"><span class="spinner"></span>Loading PostgreSQL engine…</span>';
+  db = new PGlite();
+  await db.waitReady;
+  $('genStatus').innerHTML = '<span class="success">✓ PostgreSQL engine ready.</span>';
+  setTimeout(() => { $('genStatus').innerHTML = ''; }, 1500);
+})();
 
 document.querySelectorAll('.example-chip').forEach(chip => {
   chip.addEventListener('click', () => {
@@ -407,7 +411,14 @@ $('sqlInput').addEventListener('keydown', (e) => {
   }
 });
 
-function resetAll() {
+async function dropCurrentTables() {
+  if (!db || !currentProblem) return;
+  for (const t of currentProblem.tables) {
+    try { await db.exec(`DROP TABLE IF EXISTS ${t.name} CASCADE;`); } catch (e) {}
+  }
+}
+
+async function resetAll() {
   $('prompt').value = '';
   $('sqlInput').value = '';
   $('schemaList').innerHTML = '<div style="color: var(--text-dim); font-size: 13px; text-align: center; margin-top: 30px;">Generate tables to see the schema here.</div>';
@@ -416,7 +427,7 @@ function resetAll() {
   $('checkBtn').disabled = true;
   $('rowInfo').textContent = '';
   $('genStatus').innerHTML = '';
-  if (db) { db.close(); db = null; }
+  await dropCurrentTables();
   currentProblem = null;
 }
 
@@ -425,7 +436,8 @@ async function generate() {
   const apiKey = apiKeyInput.value.trim();
   if (!prompt) { alert('Describe what kind of problem you want to practice.'); return; }
   if (!apiKey) { alert('Add your Anthropic API key in the top right.'); return; }
-  if (!SQL) { alert('SQL engine still loading, try again in a sec.'); return; }
+  await dbReady;
+  if (!db) { alert('Database failed to load.'); return; }
 
   const btn = $('generateBtn');
   btn.disabled = true;
@@ -433,9 +445,10 @@ async function generate() {
 
   try {
     const problem = await callClaude(prompt, apiKey);
+    await dropCurrentTables();
     currentProblem = problem;
-    buildDatabase(problem);
-    renderProblem(problem);
+    await buildDatabase(problem);
+    await renderProblem(problem);
     $('genStatus').innerHTML = '<span class="success">✓ Tables ready. Write a query and press Run.</span>';
     $('checkBtn').disabled = false;
   } catch (e) {
@@ -447,7 +460,7 @@ async function generate() {
 }
 
 async function callClaude(userPrompt, apiKey) {
-  const systemPrompt = `You are a SQL practice problem generator. Given a natural-language description of what the user wants to practice, produce a self-contained SQLite practice problem.
+  const systemPrompt = `You are a SQL practice problem generator. Given a natural-language description of what the user wants to practice, produce a self-contained PostgreSQL practice problem.
 
 Return ONLY a JSON object with this exact shape (no markdown fences, no prose):
 {
@@ -455,24 +468,34 @@ Return ONLY a JSON object with this exact shape (no markdown fences, no prose):
   "tables": [
     {
       "name": "snake_case_table_name",
-      "createSql": "CREATE TABLE ... ;  (SQLite-compatible DDL)",
+      "createSql": "CREATE TABLE ... ;  (PostgreSQL DDL)",
       "insertSql": "INSERT INTO ... VALUES (...), (...), ... ;  (one or more INSERT statements; AT LEAST 200 rows per table)"
     }
   ],
   "hint": "A brief hint about the SQL technique to use",
-  "solution": "A complete SQLite SELECT that solves the scenario"
+  "solution": "A complete PostgreSQL SELECT that solves the scenario"
 }
 
-Rules:
-- Use SQLite syntax (INTEGER, TEXT, REAL, dates as TEXT in 'YYYY-MM-DD' format).
+PostgreSQL SYNTAX ONLY — this is critical:
+- Use real PostgreSQL types: INTEGER, BIGINT, SERIAL, TEXT, VARCHAR(n), NUMERIC(p,s), REAL, DOUBLE PRECISION, BOOLEAN, DATE, TIMESTAMP, JSONB.
+- For dates: use the DATE type with values like '2024-03-15'. NEVER store dates as TEXT.
+- For timestamps: use TIMESTAMP type with values like '2024-03-15 14:30:00'.
+- Use Postgres date functions only: EXTRACT(YEAR FROM col), EXTRACT(MONTH FROM col), DATE_TRUNC('month', col), col + INTERVAL '7 days', AGE(col1, col2), NOW(), CURRENT_DATE, TO_CHAR(col, 'YYYY-MM').
+- DO NOT use any SQLite-specific functions: NEVER use julianday(), strftime(), date('now', ...), datetime(). These do not exist in PostgreSQL.
+- Use Postgres-specific features where natural: ILIKE, RETURNING, FILTER (WHERE ...), generate_series, ::type casts, ARRAY types, JSONB operators (->, ->>, @>).
+- Window functions, CTEs, recursive CTEs all use standard PostgreSQL syntax.
+- String concatenation: use || or CONCAT().
+- The database is REAL PostgreSQL (PGlite/WASM), not SQLite. Treat it as you would any production Postgres.
+
+Tables and data:
 - Tables must be related so the scenario actually requires the technique.
 - EVERY table must have AT LEAST 200 rows. This is non-negotiable. Generate full INSERT statements with the actual rows — do not abbreviate, do not use comments like "-- 200 more rows", do not use ellipses. Write them all out.
 - Data distribution must make the question INTERESTING and non-trivial:
-  * Categorical columns should have a realistic skew across multiple distinct values (not uniform, not all the same).
+  * Categorical columns should have realistic skew across multiple distinct values (not uniform, not all the same).
   * Numeric columns should span a meaningful range with clear winners/losers/ties so window functions, aggregates, and rankings produce non-obvious results.
   * Date columns should span multiple months/years where relevant so time-based queries are meaningful.
-  * Include intentional edge cases that make the problem worth solving: ties, NULLs (where relevant), groups of varying sizes, outliers, recent vs. old records.
-  * The reference solution should return more than a couple of rows — ideally 5–50 rows — so the user can see patterns.
+  * Include intentional edge cases: ties, NULLs (where relevant), groups of varying sizes, outliers, recent vs. old records.
+  * The reference solution should return more than a couple of rows — ideally 5–50 rows.
 - Keep table count small (1–4 tables typically).
 - The solution must run without errors against the tables you defined.
 - Output JSON only — no commentary, no markdown.`;
@@ -500,9 +523,7 @@ Rules:
 
   const data = await res.json();
   let text = data.content[0].text.trim();
-  // strip code fences if present
   text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-  // try to locate JSON
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
   if (start !== -1 && end !== -1) text = text.slice(start, end + 1);
@@ -517,16 +538,14 @@ Rules:
   return problem;
 }
 
-function buildDatabase(problem) {
-  if (db) db.close();
-  db = new SQL.Database();
+async function buildDatabase(problem) {
   for (const t of problem.tables) {
-    db.run(t.createSql);
-    if (t.insertSql && t.insertSql.trim()) db.run(t.insertSql);
+    await db.exec(t.createSql);
+    if (t.insertSql && t.insertSql.trim()) await db.exec(t.insertSql);
   }
 }
 
-function renderProblem(problem) {
+async function renderProblem(problem) {
   $('scenarioSection').style.display = 'block';
   $('scenarioText').textContent = problem.scenario;
   $('hintText').textContent = problem.hint || '(no hint provided)';
@@ -535,7 +554,7 @@ function renderProblem(problem) {
   const list = $('schemaList');
   list.innerHTML = '';
   for (const t of problem.tables) {
-    const cols = describeTable(t.name);
+    const cols = await describeTable(t.name);
     const card = document.createElement('div');
     card.className = 'table-card';
     card.innerHTML = `
@@ -547,58 +566,74 @@ function renderProblem(problem) {
         ${cols.map(c => `<div class="col"><span class="col-name">${escapeHtml(c.name)}</span><span class="col-type">${escapeHtml(c.type)}</span></div>`).join('')}
       </div>
     `;
-    card.querySelector('.table-card-header').addEventListener('click', () => {
+    card.querySelector('.table-card-header').addEventListener('click', async () => {
       $('sqlInput').value = `SELECT * FROM ${t.name} LIMIT 20;`;
-      runQuery();
+      await runQuery();
     });
     list.appendChild(card);
   }
 }
 
-function describeTable(name) {
+async function describeTable(name) {
   try {
-    const r = db.exec(`PRAGMA table_info(${name});`);
-    if (!r.length) return [];
-    return r[0].values.map(row => ({ name: row[1], type: row[2] || 'ANY' }));
+    const r = await db.query(
+      `SELECT column_name, data_type FROM information_schema.columns
+       WHERE table_name = $1 AND table_schema = 'public'
+       ORDER BY ordinal_position`,
+      [name]
+    );
+    return r.rows.map(row => ({ name: row.column_name, type: row.data_type }));
   } catch (e) { return []; }
 }
 
-function runQuery() {
-  if (!db) { showError('No database yet — generate tables first.'); return; }
+async function runQuery() {
+  if (!db) { showError('Database still loading — try again in a moment.'); return; }
   const sql = $('sqlInput').value.trim();
   if (!sql) return;
   try {
-    const results = db.exec(sql);
-    renderResults(results);
+    const result = await db.query(sql);
+    renderResults(result);
   } catch (e) {
     showError(e.message);
   }
 }
 
-function renderResults(results) {
+function formatValue(v) {
+  if (v === null || v === undefined) return null;
+  if (v instanceof Date) {
+    const iso = v.toISOString();
+    // dates without time component are stored as 00:00:00 UTC
+    return iso.endsWith('T00:00:00.000Z') ? iso.slice(0, 10) : iso.slice(0, 19).replace('T', ' ');
+  }
+  if (typeof v === 'object') return JSON.stringify(v);
+  return String(v);
+}
+
+function renderResults(result) {
   const out = $('results');
-  if (!results.length) {
-    out.innerHTML = '<h3>Results</h3><div class="success">Query executed (no rows returned).</div>';
+  const fields = result?.fields || [];
+  if (fields.length === 0) {
+    out.innerHTML = '<h3>Results</h3><div class="success">Query executed (no result columns).</div>';
     $('rowInfo').textContent = '0 rows';
     return;
   }
+  const columns = fields.map(f => f.name);
+  const rows = result.rows || [];
   let html = '<h3>Results</h3>';
-  let totalRows = 0;
-  results.forEach((r, i) => {
-    if (results.length > 1) html += `<div style="margin-top: 12px; color: var(--text-dim); font-size: 12px;">Result set ${i + 1}</div>`;
-    html += '<table class="result"><thead><tr>';
-    r.columns.forEach(c => html += `<th>${escapeHtml(c)}</th>`);
-    html += '</tr></thead><tbody>';
-    r.values.forEach(row => {
-      html += '<tr>';
-      row.forEach(v => html += `<td>${v === null ? '<span style="color: var(--text-dim);">NULL</span>' : escapeHtml(String(v))}</td>`);
-      html += '</tr>';
+  html += '<table class="result"><thead><tr>';
+  columns.forEach(c => html += `<th>${escapeHtml(c)}</th>`);
+  html += '</tr></thead><tbody>';
+  rows.forEach(row => {
+    html += '<tr>';
+    columns.forEach(c => {
+      const formatted = formatValue(row[c]);
+      html += `<td>${formatted === null ? '<span style="color: var(--text-dim);">NULL</span>' : escapeHtml(formatted)}</td>`;
     });
-    html += '</tbody></table>';
-    totalRows += r.values.length;
+    html += '</tr>';
   });
+  html += '</tbody></table>';
   out.innerHTML = html;
-  $('rowInfo').textContent = `${totalRows} row${totalRows === 1 ? '' : 's'}`;
+  $('rowInfo').textContent = `${rows.length} row${rows.length === 1 ? '' : 's'}`;
 }
 
 function showError(msg) {
@@ -606,28 +641,32 @@ function showError(msg) {
   $('rowInfo').textContent = '';
 }
 
-function checkSolution() {
+function normalizeForCompare(result) {
+  const cols = (result.fields || []).map(f => f.name);
+  return (result.rows || [])
+    .map(r => cols.map(c => {
+      const v = formatValue(r[c]);
+      return v === null ? 'NULL' : v;
+    }).join('|'))
+    .sort()
+    .join('\n');
+}
+
+async function checkSolution() {
   if (!currentProblem || !db) return;
   const userSql = $('sqlInput').value.trim();
   if (!userSql) { alert('Write a query first.'); return; }
   try {
-    const userRes = db.exec(userSql);
-    const refRes = db.exec(currentProblem.solution);
-    const userRows = userRes[0]?.values || [];
-    const refRows = refRes[0]?.values || [];
-    const norm = (rows) => rows.map(r => r.map(v => v === null ? 'NULL' : String(v)).join('|')).sort().join('\n');
-    const matches = norm(userRows) === norm(refRows);
-    const out = $('results');
+    const userRes = await db.query(userSql);
+    const refRes = await db.query(currentProblem.solution);
+    const userRows = userRes.rows || [];
+    const refRows = refRes.rows || [];
+    const matches = normalizeForCompare(userRes) === normalizeForCompare(refRes);
+    renderResults(userRes);
     if (matches) {
-      out.innerHTML = `<h3>Results</h3><div class="success">✓ Your query produces the same result as the reference solution (${userRows.length} rows).</div>` + out.querySelector('table')?.outerHTML || '';
-      // re-render the user's results below the success message
-      renderResults(userRes);
       $('results').insertAdjacentHTML('afterbegin', `<div class="success" style="margin-bottom: 10px;">✓ Matches reference solution (${userRows.length} rows).</div>`);
     } else {
-      out.innerHTML = `<h3>Results</h3>
-        <div class="error">✗ Result differs from reference solution.<br>Your query: ${userRows.length} rows. Reference: ${refRows.length} rows.</div>`;
-      renderResults(userRes);
-      $('results').insertAdjacentHTML('afterbegin', `<div class="error" style="margin-bottom: 10px;">✗ Result differs (yours: ${userRows.length} rows, expected: ${refRows.length} rows). Note: ordering is ignored, exact values are compared.</div>`);
+      $('results').insertAdjacentHTML('afterbegin', `<div class="error" style="margin-bottom: 10px;">✗ Result differs (yours: ${userRows.length} rows, expected: ${refRows.length} rows). Ordering is ignored; column order and values must match the reference.</div>`);
     }
   } catch (e) {
     showError(e.message);
