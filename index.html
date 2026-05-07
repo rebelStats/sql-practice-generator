@@ -54,7 +54,7 @@
     gap: 6px;
     align-items: center;
   }
-  .key-input input {
+  .key-input input, .key-input select {
     background: var(--panel-2);
     border: 1px solid var(--border);
     color: var(--text);
@@ -62,8 +62,10 @@
     border-radius: 6px;
     font-family: var(--mono);
     font-size: 12px;
-    width: 280px;
   }
+  .key-input input { width: 240px; }
+  .key-input #orModel { width: 220px; }
+  .key-input select { font-family: inherit; cursor: pointer; }
   .key-input label {
     font-size: 12px;
     color: var(--text-dim);
@@ -465,8 +467,12 @@
     <h1>Custom SQL Practice</h1>
     <span class="spacer"></span>
     <div class="key-input">
-      <label>Anthropic API key:</label>
+      <select id="provider" title="Choose API provider">
+        <option value="anthropic">Anthropic</option>
+        <option value="openrouter">OpenRouter</option>
+      </select>
       <input type="password" id="apiKey" placeholder="sk-ant-..." />
+      <input type="text" id="orModel" placeholder="anthropic/claude-sonnet-4.5" style="display:none;" />
     </div>
   </header>
   <div class="main">
@@ -540,9 +546,40 @@ import { PGlite } from "https://cdn.jsdelivr.net/npm/@electric-sql/pglite/dist/i
 
 const $ = (id) => document.getElementById(id);
 const apiKeyInput = $('apiKey');
-apiKeyInput.value = localStorage.getItem('anthropic_api_key') || '';
+const providerSelect = $('provider');
+const orModelInput = $('orModel');
+
+function getProvider() { return providerSelect.value; }
+function getApiKey() { return apiKeyInput.value.trim(); }
+function getModel() {
+  if (getProvider() === 'openrouter') {
+    return orModelInput.value.trim() || 'anthropic/claude-sonnet-4.5';
+  }
+  return 'claude-sonnet-4-6';
+}
+
+function loadProviderSettings() {
+  const p = getProvider();
+  apiKeyInput.placeholder = p === 'anthropic' ? 'sk-ant-...' : 'sk-or-v1-...';
+  apiKeyInput.value = localStorage.getItem(`${p}_api_key`) || '';
+  orModelInput.style.display = p === 'openrouter' ? '' : 'none';
+  if (p === 'openrouter') {
+    orModelInput.value = localStorage.getItem('openrouter_model') || 'anthropic/claude-sonnet-4.5';
+  }
+}
+
+providerSelect.value = localStorage.getItem('provider') || 'anthropic';
+loadProviderSettings();
+
+providerSelect.addEventListener('change', () => {
+  localStorage.setItem('provider', getProvider());
+  loadProviderSettings();
+});
 apiKeyInput.addEventListener('input', () => {
-  localStorage.setItem('anthropic_api_key', apiKeyInput.value.trim());
+  localStorage.setItem(`${getProvider()}_api_key`, getApiKey());
+});
+orModelInput.addEventListener('input', () => {
+  localStorage.setItem('openrouter_model', orModelInput.value.trim());
 });
 
 let db = null;
@@ -615,9 +652,8 @@ async function resetAll() {
 
 async function generate() {
   const prompt = $('prompt').value.trim();
-  const apiKey = apiKeyInput.value.trim();
   if (!prompt) { alert('Describe what kind of problem you want to practice.'); return; }
-  if (!apiKey) { alert('Add your Anthropic API key in the top right.'); return; }
+  if (!getApiKey()) { alert(`Add your ${getProvider() === 'anthropic' ? 'Anthropic' : 'OpenRouter'} API key in the top right.`); return; }
   await dbReady;
   if (!db) { alert('Database failed to load.'); return; }
 
@@ -626,7 +662,7 @@ async function generate() {
   $('genStatus').innerHTML = '<span class="loading"><span class="spinner"></span>Generating tables…</span>';
 
   try {
-    const problem = await callClaude(prompt, apiKey);
+    const problem = await callClaude(prompt);
     await dropCurrentTables();
     currentProblem = problem;
     resetChat();
@@ -642,7 +678,7 @@ async function generate() {
   }
 }
 
-async function callClaude(userPrompt, apiKey) {
+async function callClaude(userPrompt) {
   const systemPrompt = `You are a SQL practice problem generator. Given a natural-language description of what the user wants to practice, produce a self-contained PostgreSQL practice problem.
 
 Return ONLY a JSON object with this exact shape (no markdown fences, no prose):
@@ -683,29 +719,12 @@ Tables and data:
 - The solution must run without errors against the tables you defined.
 - Output JSON only — no commentary, no markdown.`;
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true'
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 16000,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userPrompt }]
-    })
+  let text = await callLLM({
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userPrompt }],
+    maxTokens: 16000
   });
-
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`API error ${res.status}: ${errText}`);
-  }
-
-  const data = await res.json();
-  let text = data.content[0].text.trim();
+  text = text.trim();
   text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
@@ -892,8 +911,7 @@ async function sendChatMessage() {
     appendChatMessage('assistant', 'Generate a problem first, then ask me about it.');
     return;
   }
-  const apiKey = apiKeyInput.value.trim();
-  if (!apiKey) { alert('Add your Anthropic API key.'); return; }
+  if (!getApiKey()) { alert(`Add your ${getProvider() === 'anthropic' ? 'Anthropic' : 'OpenRouter'} API key.`); return; }
 
   $('chatInput').value = '';
   appendChatMessage('user', text);
@@ -903,7 +921,7 @@ async function sendChatMessage() {
   loading.innerHTML = '<span class="spinner"></span> Thinking…';
 
   try {
-    const reply = await callChatClaude(apiKey);
+    const reply = await callChatClaude();
     loading.remove();
     chatHistory.push({ role: 'assistant', content: reply });
     appendChatMessage('assistant', reply);
@@ -913,7 +931,7 @@ async function sendChatMessage() {
   }
 }
 
-async function callChatClaude(apiKey) {
+async function callChatClaude() {
   const tableInfo = currentProblem.tables.map(t => t.createSql).join('\n\n');
   const userSql = getSql() || '(none yet)';
 
@@ -933,27 +951,55 @@ ${currentProblem.solution}
 User's current query in the editor:
 ${userSql}`;
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true'
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 600,
-      system: systemPrompt,
-      messages: chatHistory
-    })
+  return await callLLM({
+    system: systemPrompt,
+    messages: chatHistory,
+    maxTokens: 600
   });
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`API error ${res.status}: ${errText}`);
+}
+
+async function callLLM({ system, messages, maxTokens }) {
+  const provider = getProvider();
+  const apiKey = getApiKey();
+  if (provider === 'anthropic') {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: getModel(),
+        max_tokens: maxTokens,
+        system,
+        messages
+      })
+    });
+    if (!res.ok) throw new Error(`Anthropic API error ${res.status}: ${await res.text()}`);
+    const data = await res.json();
+    return data.content[0].text;
+  } else {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': location.origin || 'https://rebelstats.github.io/sql-practice-generator/',
+        'X-Title': 'SQL Practice Generator'
+      },
+      body: JSON.stringify({
+        model: getModel(),
+        max_tokens: maxTokens,
+        messages: [{ role: 'system', content: system }, ...messages]
+      })
+    });
+    if (!res.ok) throw new Error(`OpenRouter API error ${res.status}: ${await res.text()}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+    return data.choices[0].message.content;
   }
-  const data = await res.json();
-  return data.content[0].text;
 }
 </script>
 <script data-goatcounter="https://rebelstats.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
