@@ -487,6 +487,16 @@
           <span class="example-chip" data-text="Give me a CTE / recursive CTE problem involving an employee–manager hierarchy.">Recursive CTE</span>
           <span class="example-chip" data-text="Practice self-joins — find pairs of users who signed up on the same day.">Self-join</span>
         </div>
+        <div style="margin-top: 10px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-dim);">
+          <label for="rowCount">Rows per table:</label>
+          <select id="rowCount" style="background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 3px 6px; font-family: inherit; font-size: 12px; cursor: pointer;">
+            <option value="50">50 (smaller / free models)</option>
+            <option value="100">100</option>
+            <option value="200" selected>200</option>
+            <option value="300">300</option>
+            <option value="500">500 (large models only)</option>
+          </select>
+        </div>
         <div style="margin-top: 10px;" class="row">
           <button id="generateBtn">Generate tables</button>
           <button id="resetBtn" class="secondary">Reset</button>
@@ -570,6 +580,12 @@ function loadProviderSettings() {
 
 providerSelect.value = localStorage.getItem('provider') || 'anthropic';
 loadProviderSettings();
+
+const rowCountSelect = $('rowCount');
+rowCountSelect.value = localStorage.getItem('row_count') || '200';
+rowCountSelect.addEventListener('change', () => {
+  localStorage.setItem('row_count', rowCountSelect.value);
+});
 
 providerSelect.addEventListener('change', () => {
   localStorage.setItem('provider', getProvider());
@@ -679,6 +695,7 @@ async function generate() {
 }
 
 async function callClaude(userPrompt) {
+  const rowCount = parseInt(rowCountSelect.value, 10) || 200;
   const systemPrompt = `You are a SQL practice problem generator. Given a natural-language description of what the user wants to practice, produce a self-contained PostgreSQL practice problem.
 
 Return ONLY a JSON object with this exact shape (no markdown fences, no prose):
@@ -688,7 +705,7 @@ Return ONLY a JSON object with this exact shape (no markdown fences, no prose):
     {
       "name": "snake_case_table_name",
       "createSql": "CREATE TABLE ... ;  (PostgreSQL DDL)",
-      "insertSql": "INSERT INTO ... VALUES (...), (...), ... ;  (one or more INSERT statements; AT LEAST 200 rows per table)"
+      "insertSql": "INSERT INTO ... VALUES (...), (...), ... ;  (one or more INSERT statements; AT LEAST ${rowCount} rows per table)"
     }
   ],
   "hint": "A brief hint about the SQL technique to use",
@@ -708,7 +725,7 @@ PostgreSQL SYNTAX ONLY — this is critical:
 
 Tables and data:
 - Tables must be related so the scenario actually requires the technique.
-- EVERY table must have AT LEAST 200 rows. This is non-negotiable. Generate full INSERT statements with the actual rows — do not abbreviate, do not use comments like "-- 200 more rows", do not use ellipses. Write them all out.
+- EVERY table must have AT LEAST ${rowCount} rows. This is non-negotiable. Generate full INSERT statements with the actual rows — do not abbreviate, do not use comments like "-- N more rows", do not use ellipses. Write them all out.
 - Data distribution must make the question INTERESTING and non-trivial:
   * Categorical columns should have realistic skew across multiple distinct values (not uniform, not all the same).
   * Numeric columns should span a meaningful range with clear winners/losers/ties so window functions, aggregates, and rankings produce non-obvious results.
@@ -734,6 +751,15 @@ Tables and data:
   try {
     problem = JSON.parse(text);
   } catch (e) {
+    const truncated = /Unterminated string|Unexpected end of (?:JSON|input)/i.test(e.message);
+    if (truncated) {
+      throw new Error(
+        `The model's JSON response was cut off mid-string (${e.message}). ` +
+        `This usually means the model ran out of token budget while trying to write ${rowCount} rows of data. ` +
+        `Try lowering "Rows per table" to 50 or 100, or switch to a more capable model ` +
+        `(e.g. anthropic/claude-sonnet-4.5, openai/gpt-4o-mini).`
+      );
+    }
     throw new Error('Could not parse model response as JSON: ' + e.message);
   }
   if (!problem.tables || !problem.tables.length) throw new Error('Model returned no tables.');
