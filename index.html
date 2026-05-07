@@ -601,6 +601,7 @@ orModelInput.addEventListener('input', () => {
 let db = null;
 let currentProblem = null;
 let chatHistory = [];
+let activeAbort = null;
 
 const sqlEditor = CodeMirror.fromTextArea($('sqlInput'), {
   mode: 'text/x-pgsql',
@@ -653,6 +654,10 @@ async function dropCurrentTables() {
 }
 
 async function resetAll() {
+  if (activeAbort) {
+    activeAbort.abort();
+    activeAbort = null;
+  }
   $('prompt').value = '';
   setSql('');
   $('schemaList').innerHTML = '<div style="color: var(--text-dim); font-size: 13px; text-align: center; margin-top: 30px;">Generate tables to see the schema here.</div>';
@@ -661,6 +666,7 @@ async function resetAll() {
   $('checkBtn').disabled = true;
   $('rowInfo').textContent = '';
   $('genStatus').innerHTML = '';
+  $('generateBtn').disabled = false;
   await dropCurrentTables();
   currentProblem = null;
   resetChat();
@@ -673,12 +679,17 @@ async function generate() {
   await dbReady;
   if (!db) { alert('Database failed to load.'); return; }
 
+  if (activeAbort) activeAbort.abort();
+  const ctrl = new AbortController();
+  activeAbort = ctrl;
+
   const btn = $('generateBtn');
   btn.disabled = true;
   $('genStatus').innerHTML = '<span class="loading"><span class="spinner"></span>Generating tables…</span>';
 
   try {
-    const problem = await callClaude(prompt);
+    const problem = await callClaude(prompt, ctrl.signal);
+    if (ctrl.signal.aborted) return;
     await dropCurrentTables();
     currentProblem = problem;
     resetChat();
@@ -687,14 +698,19 @@ async function generate() {
     $('genStatus').innerHTML = '<span class="success">✓ Tables ready. Write a query and press Run.</span>';
     $('checkBtn').disabled = false;
   } catch (e) {
+    if (e.name === 'AbortError' || ctrl.signal.aborted) {
+      $('genStatus').innerHTML = '<span style="color: var(--text-dim); font-size: 13px;">Cancelled.</span>';
+      return;
+    }
     console.error(e);
     $('genStatus').innerHTML = `<div class="error">${escapeHtml(e.message)}</div>`;
   } finally {
+    if (activeAbort === ctrl) activeAbort = null;
     btn.disabled = false;
   }
 }
 
-async function callClaude(userPrompt) {
+async function callClaude(userPrompt, signal) {
   const rowCount = parseInt(rowCountSelect.value, 10) || 200;
   const systemPrompt = `You are a SQL practice problem generator. Given a natural-language description of what the user wants to practice, produce a self-contained PostgreSQL practice problem.
 
@@ -739,7 +755,8 @@ Tables and data:
   let text = await callLLM({
     system: systemPrompt,
     messages: [{ role: 'user', content: userPrompt }],
-    maxTokens: 16000
+    maxTokens: 16000,
+    signal
   });
   text = text.trim();
   text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
@@ -984,11 +1001,15 @@ ${userSql}`;
   });
 }
 
-async function callLLM({ system, messages, maxTokens }) {
+async function callLLM({ system, messages, maxTokens, signal }) {
   const provider = getProvider();
   const apiKey = getApiKey();
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 120000);
+  if (signal) {
+    if (signal.aborted) controller.abort();
+    else signal.addEventListener('abort', () => controller.abort(), { once: true });
+  }
+  const timeout = setTimeout(() => controller.abort(), 60000);
 
   try {
     if (provider === 'anthropic') {
@@ -1046,7 +1067,10 @@ async function callLLM({ system, messages, maxTokens }) {
       return text;
     }
   } catch (e) {
-    if (e.name === 'AbortError') throw new Error('Request timed out after 120s. Try a faster model or simpler prompt.');
+    if (e.name === 'AbortError') {
+      if (signal && signal.aborted) throw e;
+      throw new Error('Request timed out after 60s. Try a faster model or simpler prompt.');
+    }
     throw e;
   } finally {
     clearTimeout(timeout);
