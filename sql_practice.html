@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Custom SQL Practice</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js"></script>
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #1a1f29;
+    --panel-2: #232936;
+    --border: #2d3441;
+    --text: #e6e6e6;
+    --text-dim: #8b95a5;
+    --accent: #d97757;
+    --accent-2: #c45f3e;
+    --green: #6cb878;
+    --red: #e06c75;
+    --blue: #61afef;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+  }
+  .layout {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    height: 100vh;
+  }
+  header {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: var(--panel);
+  }
+  header h1 {
+    font-size: 16px;
+    margin: 0;
+    font-weight: 600;
+  }
+  header .spacer { flex: 1; }
+  .key-input {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .key-input input {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-family: var(--mono);
+    font-size: 12px;
+    width: 280px;
+  }
+  .key-input label {
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .main {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    overflow: hidden;
+  }
+  .sidebar {
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .section {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section h2 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    margin: 0 0 10px 0;
+    font-weight: 600;
+  }
+  textarea, input[type="text"] {
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 14px;
+    resize: vertical;
+  }
+  textarea:focus, input:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 9px 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  button:hover { background: var(--accent-2); }
+  button:disabled {
+    background: var(--border);
+    color: var(--text-dim);
+    cursor: not-allowed;
+  }
+  button.secondary {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  button.secondary:hover { background: var(--border); }
+  .sidebar-scroll {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+  }
+  .schema-list {
+    padding: 16px;
+  }
+  .table-card {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+  .table-card-header {
+    padding: 8px 12px;
+    background: var(--bg);
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent);
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+  }
+  .table-card-body {
+    padding: 8px 12px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .table-card-body .col {
+    display: flex;
+    justify-content: space-between;
+    padding: 2px 0;
+  }
+  .table-card-body .col-name { color: var(--text); }
+  .table-card-body .col-type { color: var(--blue); }
+  .editor {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .editor-toolbar {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+  }
+  .editor-toolbar .info {
+    color: var(--text-dim);
+    font-size: 13px;
+    flex: 1;
+  }
+  .sql-input {
+    flex: 1;
+    border: none;
+    border-radius: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 14px;
+    padding: 16px;
+    min-height: 200px;
+    resize: none;
+  }
+  .results {
+    flex: 1;
+    overflow: auto;
+    padding: 16px;
+    background: var(--panel);
+    border-top: 1px solid var(--border);
+    min-height: 200px;
+  }
+  .results h3 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    margin: 0 0 10px 0;
+  }
+  table.result {
+    border-collapse: collapse;
+    width: 100%;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  table.result th, table.result td {
+    border: 1px solid var(--border);
+    padding: 6px 10px;
+    text-align: left;
+  }
+  table.result th {
+    background: var(--panel-2);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  table.result tr:nth-child(even) td { background: var(--panel-2); }
+  .error {
+    color: var(--red);
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 10px;
+    background: rgba(224, 108, 117, 0.08);
+    border: 1px solid rgba(224, 108, 117, 0.3);
+    border-radius: 6px;
+  }
+  .success {
+    color: var(--green);
+    font-size: 13px;
+  }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; }
+  .scenario-box {
+    background: var(--panel-2);
+    border-left: 3px solid var(--accent);
+    padding: 10px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+    line-height: 1.5;
+    margin-bottom: 10px;
+  }
+  .hint, .solution-box {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 13px;
+    margin-top: 10px;
+  }
+  .hint { border-left: 3px solid var(--blue); }
+  .solution-box pre {
+    margin: 8px 0 0 0;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--green);
+    white-space: pre-wrap;
+  }
+  .loading {
+    color: var(--text-dim);
+    font-size: 13px;
+    font-style: italic;
+  }
+  .spinner {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  details summary {
+    cursor: pointer;
+    color: var(--text-dim);
+    font-size: 13px;
+    padding: 4px 0;
+  }
+  details[open] summary { color: var(--text); }
+  .examples {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .example-chip {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .example-chip:hover { background: var(--border); color: var(--text); }
+</style>
+</head>
+<body>
+<div class="layout">
+  <header>
+    <h1>Custom SQL Practice</h1>
+    <span class="spacer"></span>
+    <div class="key-input">
+      <label>Anthropic API key:</label>
+      <input type="password" id="apiKey" placeholder="sk-ant-..." />
+    </div>
+  </header>
+  <div class="main">
+    <aside class="sidebar">
+      <div class="section">
+        <h2>1. Describe a problem</h2>
+        <textarea id="prompt" rows="4" placeholder="e.g. I want to practice window functions for ranking products by sales within each category"></textarea>
+        <div class="examples">
+          <span class="example-chip" data-text="I want to practice JOINs across customers, orders, and order_items.">JOINs</span>
+          <span class="example-chip" data-text="Give me a problem on window functions, ranking employees by salary within each department.">Window functions</span>
+          <span class="example-chip" data-text="Practice GROUP BY and HAVING — find departments with average tenure over 5 years.">GROUP BY / HAVING</span>
+          <span class="example-chip" data-text="Give me a CTE / recursive CTE problem involving an employee–manager hierarchy.">Recursive CTE</span>
+          <span class="example-chip" data-text="Practice self-joins — find pairs of users who signed up on the same day.">Self-join</span>
+        </div>
+        <div style="margin-top: 10px;" class="row">
+          <button id="generateBtn">Generate tables</button>
+          <button id="resetBtn" class="secondary">Reset</button>
+        </div>
+        <div id="genStatus" style="margin-top: 8px;"></div>
+      </div>
+      <div class="sidebar-scroll">
+      <div class="section" id="scenarioSection" style="display:none;">
+        <h2>Scenario</h2>
+        <div class="scenario-box" id="scenarioText"></div>
+        <details>
+          <summary>Hint</summary>
+          <div class="hint" id="hintText"></div>
+        </details>
+        <details style="margin-top: 6px;">
+          <summary>Show solution</summary>
+          <div class="solution-box"><pre id="solutionText"></pre></div>
+        </details>
+      </div>
+      <div class="schema-list" id="schemaList">
+        <div style="color: var(--text-dim); font-size: 13px; text-align: center; margin-top: 30px;">
+          Generate tables to see the schema here.
+        </div>
+      </div>
+      </div>
+    </aside>
+    <div class="editor">
+      <div class="editor-toolbar">
+        <button id="runBtn">Run query (⌘/Ctrl+Enter)</button>
+        <button id="checkBtn" class="secondary" disabled>Check vs solution</button>
+        <span class="info" id="rowInfo"></span>
+      </div>
+      <textarea class="sql-input" id="sqlInput" spellcheck="false" placeholder="-- Write your SQL here, then press ⌘/Ctrl+Enter to run."></textarea>
+      <div class="results" id="results">
+        <h3>Results</h3>
+        <div style="color: var(--text-dim); font-size: 13px;">Run a query to see results.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const apiKeyInput = $('apiKey');
+apiKeyInput.value = localStorage.getItem('anthropic_api_key') || '';
+apiKeyInput.addEventListener('input', () => {
+  localStorage.setItem('anthropic_api_key', apiKeyInput.value.trim());
+});
+
+let SQL = null;
+let db = null;
+let currentProblem = null;
+
+initSqlJs({ locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/${f}` })
+  .then(s => { SQL = s; });
+
+document.querySelectorAll('.example-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    $('prompt').value = chip.dataset.text;
+  });
+});
+
+$('generateBtn').addEventListener('click', generate);
+$('resetBtn').addEventListener('click', resetAll);
+$('runBtn').addEventListener('click', runQuery);
+$('checkBtn').addEventListener('click', checkSolution);
+$('sqlInput').addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+    e.preventDefault();
+    runQuery();
+  }
+});
+
+function resetAll() {
+  $('prompt').value = '';
+  $('sqlInput').value = '';
+  $('schemaList').innerHTML = '<div style="color: var(--text-dim); font-size: 13px; text-align: center; margin-top: 30px;">Generate tables to see the schema here.</div>';
+  $('scenarioSection').style.display = 'none';
+  $('results').innerHTML = '<h3>Results</h3><div style="color: var(--text-dim); font-size: 13px;">Run a query to see results.</div>';
+  $('checkBtn').disabled = true;
+  $('rowInfo').textContent = '';
+  $('genStatus').innerHTML = '';
+  if (db) { db.close(); db = null; }
+  currentProblem = null;
+}
+
+async function generate() {
+  const prompt = $('prompt').value.trim();
+  const apiKey = apiKeyInput.value.trim();
+  if (!prompt) { alert('Describe what kind of problem you want to practice.'); return; }
+  if (!apiKey) { alert('Add your Anthropic API key in the top right.'); return; }
+  if (!SQL) { alert('SQL engine still loading, try again in a sec.'); return; }
+
+  const btn = $('generateBtn');
+  btn.disabled = true;
+  $('genStatus').innerHTML = '<span class="loading"><span class="spinner"></span>Generating tables…</span>';
+
+  try {
+    const problem = await callClaude(prompt, apiKey);
+    currentProblem = problem;
+    buildDatabase(problem);
+    renderProblem(problem);
+    $('genStatus').innerHTML = '<span class="success">✓ Tables ready. Write a query and press Run.</span>';
+    $('checkBtn').disabled = false;
+  } catch (e) {
+    console.error(e);
+    $('genStatus').innerHTML = `<div class="error">${escapeHtml(e.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function callClaude(userPrompt, apiKey) {
+  const systemPrompt = `You are a SQL practice problem generator. Given a natural-language description of what the user wants to practice, produce a self-contained SQLite practice problem.
+
+Return ONLY a JSON object with this exact shape (no markdown fences, no prose):
+{
+  "scenario": "1-3 sentence problem statement the user must solve with SQL",
+  "tables": [
+    {
+      "name": "snake_case_table_name",
+      "createSql": "CREATE TABLE ... ;  (SQLite-compatible DDL)",
+      "insertSql": "INSERT INTO ... VALUES (...), (...), ... ;  (one or more INSERT statements; AT LEAST 200 rows per table)"
+    }
+  ],
+  "hint": "A brief hint about the SQL technique to use",
+  "solution": "A complete SQLite SELECT that solves the scenario"
+}
+
+Rules:
+- Use SQLite syntax (INTEGER, TEXT, REAL, dates as TEXT in 'YYYY-MM-DD' format).
+- Tables must be related so the scenario actually requires the technique.
+- EVERY table must have AT LEAST 200 rows. This is non-negotiable. Generate full INSERT statements with the actual rows — do not abbreviate, do not use comments like "-- 200 more rows", do not use ellipses. Write them all out.
+- Data distribution must make the question INTERESTING and non-trivial:
+  * Categorical columns should have a realistic skew across multiple distinct values (not uniform, not all the same).
+  * Numeric columns should span a meaningful range with clear winners/losers/ties so window functions, aggregates, and rankings produce non-obvious results.
+  * Date columns should span multiple months/years where relevant so time-based queries are meaningful.
+  * Include intentional edge cases that make the problem worth solving: ties, NULLs (where relevant), groups of varying sizes, outliers, recent vs. old records.
+  * The reference solution should return more than a couple of rows — ideally 5–50 rows — so the user can see patterns.
+- Keep table count small (1–4 tables typically).
+- The solution must run without errors against the tables you defined.
+- Output JSON only — no commentary, no markdown.`;
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 16000,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userPrompt }]
+    })
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`API error ${res.status}: ${errText}`);
+  }
+
+  const data = await res.json();
+  let text = data.content[0].text.trim();
+  // strip code fences if present
+  text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  // try to locate JSON
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start !== -1 && end !== -1) text = text.slice(start, end + 1);
+
+  let problem;
+  try {
+    problem = JSON.parse(text);
+  } catch (e) {
+    throw new Error('Could not parse model response as JSON: ' + e.message);
+  }
+  if (!problem.tables || !problem.tables.length) throw new Error('Model returned no tables.');
+  return problem;
+}
+
+function buildDatabase(problem) {
+  if (db) db.close();
+  db = new SQL.Database();
+  for (const t of problem.tables) {
+    db.run(t.createSql);
+    if (t.insertSql && t.insertSql.trim()) db.run(t.insertSql);
+  }
+}
+
+function renderProblem(problem) {
+  $('scenarioSection').style.display = 'block';
+  $('scenarioText').textContent = problem.scenario;
+  $('hintText').textContent = problem.hint || '(no hint provided)';
+  $('solutionText').textContent = problem.solution || '(no solution provided)';
+
+  const list = $('schemaList');
+  list.innerHTML = '';
+  for (const t of problem.tables) {
+    const cols = describeTable(t.name);
+    const card = document.createElement('div');
+    card.className = 'table-card';
+    card.innerHTML = `
+      <div class="table-card-header">
+        <span>${escapeHtml(t.name)}</span>
+        <span style="color: var(--text-dim); font-weight: normal;">${cols.length} cols</span>
+      </div>
+      <div class="table-card-body">
+        ${cols.map(c => `<div class="col"><span class="col-name">${escapeHtml(c.name)}</span><span class="col-type">${escapeHtml(c.type)}</span></div>`).join('')}
+      </div>
+    `;
+    card.querySelector('.table-card-header').addEventListener('click', () => {
+      $('sqlInput').value = `SELECT * FROM ${t.name} LIMIT 20;`;
+      runQuery();
+    });
+    list.appendChild(card);
+  }
+}
+
+function describeTable(name) {
+  try {
+    const r = db.exec(`PRAGMA table_info(${name});`);
+    if (!r.length) return [];
+    return r[0].values.map(row => ({ name: row[1], type: row[2] || 'ANY' }));
+  } catch (e) { return []; }
+}
+
+function runQuery() {
+  if (!db) { showError('No database yet — generate tables first.'); return; }
+  const sql = $('sqlInput').value.trim();
+  if (!sql) return;
+  try {
+    const results = db.exec(sql);
+    renderResults(results);
+  } catch (e) {
+    showError(e.message);
+  }
+}
+
+function renderResults(results) {
+  const out = $('results');
+  if (!results.length) {
+    out.innerHTML = '<h3>Results</h3><div class="success">Query executed (no rows returned).</div>';
+    $('rowInfo').textContent = '0 rows';
+    return;
+  }
+  let html = '<h3>Results</h3>';
+  let totalRows = 0;
+  results.forEach((r, i) => {
+    if (results.length > 1) html += `<div style="margin-top: 12px; color: var(--text-dim); font-size: 12px;">Result set ${i + 1}</div>`;
+    html += '<table class="result"><thead><tr>';
+    r.columns.forEach(c => html += `<th>${escapeHtml(c)}</th>`);
+    html += '</tr></thead><tbody>';
+    r.values.forEach(row => {
+      html += '<tr>';
+      row.forEach(v => html += `<td>${v === null ? '<span style="color: var(--text-dim);">NULL</span>' : escapeHtml(String(v))}</td>`);
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    totalRows += r.values.length;
+  });
+  out.innerHTML = html;
+  $('rowInfo').textContent = `${totalRows} row${totalRows === 1 ? '' : 's'}`;
+}
+
+function showError(msg) {
+  $('results').innerHTML = `<h3>Results</h3><div class="error">${escapeHtml(msg)}</div>`;
+  $('rowInfo').textContent = '';
+}
+
+function checkSolution() {
+  if (!currentProblem || !db) return;
+  const userSql = $('sqlInput').value.trim();
+  if (!userSql) { alert('Write a query first.'); return; }
+  try {
+    const userRes = db.exec(userSql);
+    const refRes = db.exec(currentProblem.solution);
+    const userRows = userRes[0]?.values || [];
+    const refRows = refRes[0]?.values || [];
+    const norm = (rows) => rows.map(r => r.map(v => v === null ? 'NULL' : String(v)).join('|')).sort().join('\n');
+    const matches = norm(userRows) === norm(refRows);
+    const out = $('results');
+    if (matches) {
+      out.innerHTML = `<h3>Results</h3><div class="success">✓ Your query produces the same result as the reference solution (${userRows.length} rows).</div>` + out.querySelector('table')?.outerHTML || '';
+      // re-render the user's results below the success message
+      renderResults(userRes);
+      $('results').insertAdjacentHTML('afterbegin', `<div class="success" style="margin-bottom: 10px;">✓ Matches reference solution (${userRows.length} rows).</div>`);
+    } else {
+      out.innerHTML = `<h3>Results</h3>
+        <div class="error">✗ Result differs from reference solution.<br>Your query: ${userRows.length} rows. Reference: ${refRows.length} rows.</div>`;
+      renderResults(userRes);
+      $('results').insertAdjacentHTML('afterbegin', `<div class="error" style="margin-bottom: 10px;">✗ Result differs (yours: ${userRows.length} rows, expected: ${refRows.length} rows). Note: ordering is ignored, exact values are compared.</div>`);
+    }
+  } catch (e) {
+    showError(e.message);
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+</script>
+</body>
+</html>
