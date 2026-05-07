@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <title>Custom SQL Practice</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/sql/sql.min.js"></script>
 <style>
   :root {
     --bg: #0f1419;
@@ -197,6 +200,44 @@
     min-height: 200px;
     resize: none;
   }
+  .CodeMirror {
+    flex: 1;
+    height: auto !important;
+    min-height: 200px;
+    font-family: var(--mono);
+    font-size: 14px;
+    background: var(--bg);
+    color: var(--text);
+  }
+  .cm-s-claude.CodeMirror { background: var(--bg); color: var(--text); }
+  .cm-s-claude .CodeMirror-gutters {
+    background: var(--bg);
+    border-right: 1px solid var(--border);
+    color: var(--text-dim);
+  }
+  .cm-s-claude .CodeMirror-linenumber { color: var(--text-dim); }
+  .cm-s-claude .CodeMirror-cursor { border-left: 1px solid var(--accent); }
+  .cm-s-claude .CodeMirror-selected { background: rgba(217, 119, 87, 0.18); }
+  .cm-s-claude.CodeMirror-focused .CodeMirror-selected { background: rgba(217, 119, 87, 0.28); }
+  .cm-s-claude .CodeMirror-line::selection,
+  .cm-s-claude .CodeMirror-line > span::selection,
+  .cm-s-claude .CodeMirror-line > span > span::selection { background: rgba(217, 119, 87, 0.28); }
+  .cm-s-claude .cm-keyword { color: #d97757; font-weight: 600; }
+  .cm-s-claude .cm-builtin { color: #61afef; }
+  .cm-s-claude .cm-atom { color: #c678dd; }
+  .cm-s-claude .cm-number { color: #d19a66; }
+  .cm-s-claude .cm-string { color: #98c379; }
+  .cm-s-claude .cm-string-2 { color: #98c379; }
+  .cm-s-claude .cm-comment { color: #5c6370; font-style: italic; }
+  .cm-s-claude .cm-operator { color: #e6e6e6; }
+  .cm-s-claude .cm-variable { color: #e6e6e6; }
+  .cm-s-claude .cm-variable-2 { color: #61afef; }
+  .cm-s-claude .cm-variable-3, .cm-s-claude .cm-type { color: #56b6c2; }
+  .cm-s-claude .cm-def { color: #e6e6e6; }
+  .cm-s-claude .cm-bracket { color: #e6e6e6; }
+  .cm-s-claude .cm-punctuation { color: #abb2bf; }
+  .cm-s-claude .CodeMirror-matchingbracket { color: #d97757 !important; text-decoration: underline; }
+  .cm-s-claude .CodeMirror-activeline-background { background: rgba(255, 255, 255, 0.03); }
   .results {
     flex: 1;
     overflow: auto;
@@ -507,6 +548,23 @@ apiKeyInput.addEventListener('input', () => {
 let db = null;
 let currentProblem = null;
 let chatHistory = [];
+
+const sqlEditor = CodeMirror.fromTextArea($('sqlInput'), {
+  mode: 'text/x-pgsql',
+  theme: 'claude',
+  lineNumbers: true,
+  lineWrapping: true,
+  matchBrackets: true,
+  styleActiveLine: true,
+  indentUnit: 2,
+  extraKeys: {
+    'Cmd-Enter': () => runQuery(),
+    'Ctrl-Enter': () => runQuery(),
+    'Tab': cm => cm.replaceSelection('  ', 'end')
+  }
+});
+const getSql = () => sqlEditor.getValue().trim();
+const setSql = (v) => sqlEditor.setValue(v);
 let dbReady = (async () => {
   $('genStatus').innerHTML = '<span class="loading"><span class="spinner"></span>Loading PostgreSQL engine…</span>';
   db = new PGlite();
@@ -525,12 +583,6 @@ $('generateBtn').addEventListener('click', generate);
 $('resetBtn').addEventListener('click', resetAll);
 $('runBtn').addEventListener('click', runQuery);
 $('checkBtn').addEventListener('click', checkSolution);
-$('sqlInput').addEventListener('keydown', (e) => {
-  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-    e.preventDefault();
-    runQuery();
-  }
-});
 $('chatSendBtn').addEventListener('click', sendChatMessage);
 $('chatClearBtn').addEventListener('click', resetChat);
 $('chatInput').addEventListener('keydown', (e) => {
@@ -549,7 +601,7 @@ async function dropCurrentTables() {
 
 async function resetAll() {
   $('prompt').value = '';
-  $('sqlInput').value = '';
+  setSql('');
   $('schemaList').innerHTML = '<div style="color: var(--text-dim); font-size: 13px; text-align: center; margin-top: 30px;">Generate tables to see the schema here.</div>';
   $('scenarioSection').style.display = 'none';
   $('results').innerHTML = '<h3>Results</h3><div style="color: var(--text-dim); font-size: 13px;">Run a query to see results.</div>';
@@ -698,7 +750,7 @@ async function renderProblem(problem) {
       </div>
     `;
     card.querySelector('.table-card-header').addEventListener('click', async () => {
-      $('sqlInput').value = `SELECT * FROM ${t.name} LIMIT 20;`;
+      setSql(`SELECT * FROM ${t.name} LIMIT 20;`);
       await runQuery();
     });
     list.appendChild(card);
@@ -719,7 +771,7 @@ async function describeTable(name) {
 
 async function runQuery() {
   if (!db) { showError('Database still loading — try again in a moment.'); return; }
-  const sql = $('sqlInput').value.trim();
+  const sql = getSql();
   if (!sql) return;
   try {
     const result = await db.query(sql);
@@ -785,7 +837,7 @@ function normalizeForCompare(result) {
 
 async function checkSolution() {
   if (!currentProblem || !db) return;
-  const userSql = $('sqlInput').value.trim();
+  const userSql = getSql();
   if (!userSql) { alert('Write a query first.'); return; }
   try {
     const userRes = await db.query(userSql);
@@ -863,7 +915,7 @@ async function sendChatMessage() {
 
 async function callChatClaude(apiKey) {
   const tableInfo = currentProblem.tables.map(t => t.createSql).join('\n\n');
-  const userSql = $('sqlInput').value.trim() || '(none yet)';
+  const userSql = getSql() || '(none yet)';
 
   const systemPrompt = `You are a SQL tutor helping someone solve a PostgreSQL practice problem. Be CONCISE — answer in 2–4 short sentences or a brief code snippet. Don't lecture. Don't restate the question. Don't add context they didn't ask for. Use markdown code fences (\`\`\`sql ... \`\`\`) for any SQL.
 
