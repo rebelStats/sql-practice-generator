@@ -961,44 +961,69 @@ ${userSql}`;
 async function callLLM({ system, messages, maxTokens }) {
   const provider = getProvider();
   const apiKey = getApiKey();
-  if (provider === 'anthropic') {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: getModel(),
-        max_tokens: maxTokens,
-        system,
-        messages
-      })
-    });
-    if (!res.ok) throw new Error(`Anthropic API error ${res.status}: ${await res.text()}`);
-    const data = await res.json();
-    return data.content[0].text;
-  } else {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'HTTP-Referer': location.origin || 'https://rebelstats.github.io/sql-practice-generator/',
-        'X-Title': 'SQL Practice Generator'
-      },
-      body: JSON.stringify({
-        model: getModel(),
-        max_tokens: maxTokens,
-        messages: [{ role: 'system', content: system }, ...messages]
-      })
-    });
-    if (!res.ok) throw new Error(`OpenRouter API error ${res.status}: ${await res.text()}`);
-    const data = await res.json();
-    if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
-    return data.choices[0].message.content;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 120000);
+
+  try {
+    if (provider === 'anthropic') {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: getModel(),
+          max_tokens: maxTokens,
+          system,
+          messages
+        })
+      });
+      if (!res.ok) throw new Error(`Anthropic API error ${res.status}: ${await res.text()}`);
+      const data = await res.json();
+      const text = data?.content?.[0]?.text;
+      if (!text) throw new Error('Anthropic returned empty content. Raw: ' + JSON.stringify(data).slice(0, 500));
+      return text;
+    } else {
+      // file:// pages have origin "null" — use the public URL so OpenRouter accepts the request
+      const referer = (location.protocol === 'file:' || !location.origin || location.origin === 'null')
+        ? 'https://rebelstats.github.io/sql-practice-generator/'
+        : location.origin;
+      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+          'HTTP-Referer': referer,
+          'X-Title': 'SQL Practice Generator'
+        },
+        body: JSON.stringify({
+          model: getModel(),
+          max_tokens: maxTokens,
+          messages: [{ role: 'system', content: system }, ...messages]
+        })
+      });
+      const raw = await res.text();
+      let data;
+      try { data = JSON.parse(raw); } catch { throw new Error(`OpenRouter returned non-JSON (${res.status}): ${raw.slice(0, 300)}`); }
+      if (!res.ok) throw new Error(`OpenRouter API error ${res.status}: ${data.error?.message || raw.slice(0, 300)}`);
+      if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+      const text = data?.choices?.[0]?.message?.content;
+      if (!text || !text.trim()) {
+        const finish = data?.choices?.[0]?.finish_reason;
+        throw new Error(`OpenRouter returned empty content (finish_reason: ${finish || 'unknown'}). The selected model "${getModel()}" may have refused, hit a rate limit, or be unable to handle this size of prompt. Try a different model.`);
+      }
+      return text;
+    }
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error('Request timed out after 120s. Try a faster model or simpler prompt.');
+    throw e;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 </script>
