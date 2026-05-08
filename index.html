@@ -469,6 +469,7 @@
     <div class="key-input">
       <select id="provider" title="Choose API provider">
         <option value="anthropic">Anthropic</option>
+        <option value="openai">OpenAI</option>
         <option value="openrouter">OpenRouter</option>
       </select>
       <input type="password" id="apiKey" placeholder="sk-ant-..." />
@@ -559,22 +560,38 @@ const apiKeyInput = $('apiKey');
 const providerSelect = $('provider');
 const orModelInput = $('orModel');
 
+const DEFAULT_MODELS = {
+  anthropic: 'claude-sonnet-4-6',
+  openai: 'gpt-5-nano',
+  openrouter: 'google/gemini-3.1-flash-lite'
+};
+const KEY_PLACEHOLDERS = {
+  anthropic: 'sk-ant-...',
+  openai: 'sk-...',
+  openrouter: 'sk-or-v1-...'
+};
+
 function getProvider() { return providerSelect.value; }
+function getProviderName() {
+  return { anthropic: 'Anthropic', openai: 'OpenAI', openrouter: 'OpenRouter' }[getProvider()];
+}
 function getApiKey() { return apiKeyInput.value.trim(); }
 function getModel() {
-  if (getProvider() === 'openrouter') {
-    return orModelInput.value.trim() || 'google/gemini-3.1-flash-lite';
-  }
-  return 'claude-sonnet-4-6';
+  const p = getProvider();
+  if (p === 'anthropic') return DEFAULT_MODELS.anthropic;
+  return orModelInput.value.trim() || DEFAULT_MODELS[p];
 }
 
 function loadProviderSettings() {
   const p = getProvider();
-  apiKeyInput.placeholder = p === 'anthropic' ? 'sk-ant-...' : 'sk-or-v1-...';
+  apiKeyInput.placeholder = KEY_PLACEHOLDERS[p];
   apiKeyInput.value = localStorage.getItem(`${p}_api_key`) || '';
-  orModelInput.style.display = p === 'openrouter' ? '' : 'none';
-  if (p === 'openrouter') {
-    orModelInput.value = localStorage.getItem('openrouter_model') || 'google/gemini-3.1-flash-lite';
+  if (p === 'anthropic') {
+    orModelInput.style.display = 'none';
+  } else {
+    orModelInput.style.display = '';
+    orModelInput.placeholder = DEFAULT_MODELS[p];
+    orModelInput.value = localStorage.getItem(`${p}_model`) || DEFAULT_MODELS[p];
   }
 }
 
@@ -595,7 +612,7 @@ apiKeyInput.addEventListener('input', () => {
   localStorage.setItem(`${getProvider()}_api_key`, getApiKey());
 });
 orModelInput.addEventListener('input', () => {
-  localStorage.setItem('openrouter_model', orModelInput.value.trim());
+  localStorage.setItem(`${getProvider()}_model`, orModelInput.value.trim());
 });
 
 let db = null;
@@ -675,7 +692,7 @@ async function resetAll() {
 async function generate() {
   const prompt = $('prompt').value.trim();
   if (!prompt) { alert('Describe what kind of problem you want to practice.'); return; }
-  if (!getApiKey()) { alert(`Add your ${getProvider() === 'anthropic' ? 'Anthropic' : 'OpenRouter'} API key in the top right.`); return; }
+  if (!getApiKey()) { alert(`Add your ${getProviderName()} API key in the top right.`); return; }
   await dbReady;
   if (!db) { alert('Database failed to load.'); return; }
 
@@ -954,7 +971,7 @@ async function sendChatMessage() {
     appendChatMessage('assistant', 'Generate a problem first, then ask me about it.');
     return;
   }
-  if (!getApiKey()) { alert(`Add your ${getProvider() === 'anthropic' ? 'Anthropic' : 'OpenRouter'} API key.`); return; }
+  if (!getApiKey()) { alert(`Add your ${getProviderName()} API key.`); return; }
 
   $('chatInput').value = '';
   appendChatMessage('user', text);
@@ -1035,34 +1052,45 @@ async function callLLM({ system, messages, maxTokens, signal }) {
       if (!text) throw new Error('Anthropic returned empty content. Raw: ' + JSON.stringify(data).slice(0, 500));
       return text;
     } else {
-      // file:// pages have origin "null" — use the public URL so OpenRouter accepts the request
-      const referer = (location.protocol === 'file:' || !location.origin || location.origin === 'null')
-        ? 'https://rebelstats.github.io/sql-practice-generator/'
-        : location.origin;
-      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      const isOpenAI = provider === 'openai';
+      const url = isOpenAI
+        ? 'https://api.openai.com/v1/chat/completions'
+        : 'https://openrouter.ai/api/v1/chat/completions';
+      const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      };
+      if (!isOpenAI) {
+        // OpenRouter requires a referer; file:// origin is "null" and gets rejected
+        const referer = (location.protocol === 'file:' || !location.origin || location.origin === 'null')
+          ? 'https://rebelstats.github.io/sql-practice-generator/'
+          : location.origin;
+        headers['HTTP-Referer'] = referer;
+        headers['X-Title'] = 'SQL Practice Generator';
+      }
+      const body = {
+        model: getModel(),
+        messages: [{ role: 'system', content: system }, ...messages]
+      };
+      // OpenAI's newer models (gpt-5, o1, etc.) require max_completion_tokens
+      if (isOpenAI) body.max_completion_tokens = maxTokens;
+      else body.max_tokens = maxTokens;
+
+      const res = await fetch(url, {
         method: 'POST',
         signal: controller.signal,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-          'HTTP-Referer': referer,
-          'X-Title': 'SQL Practice Generator'
-        },
-        body: JSON.stringify({
-          model: getModel(),
-          max_tokens: maxTokens,
-          messages: [{ role: 'system', content: system }, ...messages]
-        })
+        headers,
+        body: JSON.stringify(body)
       });
       const raw = await res.text();
       let data;
-      try { data = JSON.parse(raw); } catch { throw new Error(`OpenRouter returned non-JSON (${res.status}): ${raw.slice(0, 300)}`); }
-      if (!res.ok) throw new Error(`OpenRouter API error ${res.status}: ${data.error?.message || raw.slice(0, 300)}`);
+      try { data = JSON.parse(raw); } catch { throw new Error(`${getProviderName()} returned non-JSON (${res.status}): ${raw.slice(0, 300)}`); }
+      if (!res.ok) throw new Error(`${getProviderName()} API error ${res.status}: ${data.error?.message || raw.slice(0, 300)}`);
       if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
       const text = data?.choices?.[0]?.message?.content;
       if (!text || !text.trim()) {
         const finish = data?.choices?.[0]?.finish_reason;
-        throw new Error(`OpenRouter returned empty content (finish_reason: ${finish || 'unknown'}). The selected model "${getModel()}" may have refused, hit a rate limit, or be unable to handle this size of prompt. Try a different model.`);
+        throw new Error(`${getProviderName()} returned empty content (finish_reason: ${finish || 'unknown'}). The selected model "${getModel()}" may have refused, hit a rate limit, or be unable to handle this size of prompt. Try a different model.`);
       }
       return text;
     }
