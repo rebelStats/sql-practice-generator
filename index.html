@@ -529,7 +529,7 @@
           <button id="chatClearBtn" title="Clear conversation">Clear</button>
         </div>
         <div class="chat-messages" id="chatMessages">
-          <div class="chat-empty">Generate a problem, then ask follow-up questions here.</div>
+          <div class="chat-empty">Ask follow-up questions about the current problem here.</div>
         </div>
         <div class="chat-input-area">
           <textarea id="chatInput" rows="1" placeholder="e.g. Why does this need a window function?"></textarea>
@@ -640,9 +640,97 @@ let dbReady = (async () => {
   $('genStatus').innerHTML = '<span class="loading"><span class="spinner"></span>Loading PostgreSQL engine…</span>';
   db = new PGlite();
   await db.waitReady;
-  $('genStatus').innerHTML = '<span class="success">✓ PostgreSQL engine ready.</span>';
-  setTimeout(() => { $('genStatus').innerHTML = ''; }, 1500);
+  $('genStatus').innerHTML = '<span class="loading"><span class="spinner"></span>Loading sample problem…</span>';
+  const defaultProblem = getDefaultProblem();
+  currentProblem = defaultProblem;
+  await buildDatabase(defaultProblem);
+  await renderProblem(defaultProblem);
+  $('genStatus').innerHTML = '<span class="success">✓ Ready. Sample problem loaded — write a query, or generate a new problem above.</span>';
+  setTimeout(() => { $('genStatus').innerHTML = ''; }, 5000);
 })();
+
+function makeRng(seed) {
+  let s = seed >>> 0;
+  return () => {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+}
+
+function getDefaultProblem() {
+  const eventTypes = [
+    'wake_word','query','audio_play','music_control','timer_set',
+    'reminder','navigation','message_send','smart_home','weather',
+    'calendar_check','sports_score'
+  ];
+  const users = [101,102,103,201,202,203,204,301,302,303,401,402,403,501,502];
+  const rng = makeRng(42);
+  const events = [];
+  const baseMs = Date.parse('2024-09-15T07:30:00Z');
+
+  for (const userId of users) {
+    let t = baseMs + Math.floor(rng() * 86400000 * 6);
+    const numSessions = 2 + Math.floor(rng() * 5);
+    for (let s = 0; s < numSessions; s++) {
+      const sessionEvents = 2 + Math.floor(rng() * 9);
+      for (let e = 0; e < sessionEvents; e++) {
+        events.push({
+          user_id: userId,
+          ts: new Date(t),
+          event_type: eventTypes[Math.floor(rng() * eventTypes.length)]
+        });
+        t += Math.floor((30 + rng() * 1470) * 1000); // 30s–25min between events
+      }
+      t += Math.floor((35 + rng() * 445) * 60 * 1000); // 35min–8h between sessions
+    }
+  }
+  events.sort((a, b) => a.user_id - b.user_id || a.ts - b.ts);
+  const fmt = (d) => d.toISOString().slice(0, 19).replace('T', ' ');
+  const valuesSql = events.map(e => `  (${e.user_id}, '${fmt(e.ts)}', '${e.event_type}')`).join(',\n');
+
+  return {
+    scenario: `Apple's Siri Quality team needs to analyze "interaction bursts." A single interaction burst (session) is a sequence of events from the same user where no two consecutive events are more than 30 minutes apart. If a user is inactive for more than 30 minutes, the next event starts a new session.
+
+Write a SQL query to assign a unique session_id per user. For each session, return user_id, session_start (first event timestamp), session_end (last event timestamp), event_count within the session, and session_duration_seconds.`,
+    tables: [{
+      name: 'siri_events',
+      createSql: `CREATE TABLE siri_events (
+  user_id INTEGER NOT NULL,
+  event_timestamp TIMESTAMP NOT NULL,
+  event_type VARCHAR(32) NOT NULL
+);`,
+      insertSql: `INSERT INTO siri_events (user_id, event_timestamp, event_type) VALUES\n${valuesSql};`
+    }],
+    hint: 'Use LAG() to get the previous event timestamp per user. Mark a new session whenever the gap exceeds 30 minutes (1800 seconds). Then use a running SUM of that marker as the session_id.',
+    solution: `WITH ordered AS (
+  SELECT
+    user_id,
+    event_timestamp,
+    event_type,
+    LAG(event_timestamp) OVER (PARTITION BY user_id ORDER BY event_timestamp) AS prev_ts
+  FROM siri_events
+),
+session_marks AS (
+  SELECT
+    user_id,
+    event_timestamp,
+    event_type,
+    SUM(CASE WHEN prev_ts IS NULL OR EXTRACT(EPOCH FROM (event_timestamp - prev_ts)) > 1800 THEN 1 ELSE 0 END)
+      OVER (PARTITION BY user_id ORDER BY event_timestamp) AS session_id
+  FROM ordered
+)
+SELECT
+  user_id,
+  session_id,
+  MIN(event_timestamp) AS session_start,
+  MAX(event_timestamp) AS session_end,
+  COUNT(*) AS event_count,
+  EXTRACT(EPOCH FROM (MAX(event_timestamp) - MIN(event_timestamp)))::INTEGER AS session_duration_seconds
+FROM session_marks
+GROUP BY user_id, session_id
+ORDER BY user_id, session_start;`
+  };
+}
 
 document.querySelectorAll('.example-chip').forEach(chip => {
   chip.addEventListener('click', () => {
@@ -941,7 +1029,10 @@ function escapeHtml(s) {
 
 function resetChat() {
   chatHistory = [];
-  $('chatMessages').innerHTML = '<div class="chat-empty">Generate a problem, then ask follow-up questions here.</div>';
+  const msg = currentProblem
+    ? 'Ask follow-up questions about the current problem here.'
+    : 'Generate a problem, then ask follow-up questions here.';
+  $('chatMessages').innerHTML = `<div class="chat-empty">${msg}</div>`;
 }
 
 function appendChatMessage(role, content) {
