@@ -472,7 +472,7 @@
         <option value="openrouter">OpenRouter</option>
       </select>
       <input type="password" id="apiKey" placeholder="sk-ant-..." />
-      <input type="text" id="orModel" placeholder="anthropic/claude-sonnet-4.5" style="display:none;" />
+      <input type="text" id="orModel" placeholder="google/gemini-3.1-flash-lite" style="display:none;" />
     </div>
   </header>
   <div class="main">
@@ -563,7 +563,7 @@ function getProvider() { return providerSelect.value; }
 function getApiKey() { return apiKeyInput.value.trim(); }
 function getModel() {
   if (getProvider() === 'openrouter') {
-    return orModelInput.value.trim() || 'anthropic/claude-sonnet-4.5';
+    return orModelInput.value.trim() || 'google/gemini-3.1-flash-lite';
   }
   return 'claude-sonnet-4-6';
 }
@@ -574,7 +574,7 @@ function loadProviderSettings() {
   apiKeyInput.value = localStorage.getItem(`${p}_api_key`) || '';
   orModelInput.style.display = p === 'openrouter' ? '' : 'none';
   if (p === 'openrouter') {
-    orModelInput.value = localStorage.getItem('openrouter_model') || 'anthropic/claude-sonnet-4.5';
+    orModelInput.value = localStorage.getItem('openrouter_model') || 'google/gemini-3.1-flash-lite';
   }
 }
 
@@ -774,7 +774,7 @@ Tables and data:
         `The model's JSON response was cut off mid-string (${e.message}). ` +
         `This usually means the model ran out of token budget while trying to write ${rowCount} rows of data. ` +
         `Try lowering "Rows per table" to 50 or 100, or switch to a more capable model ` +
-        `(e.g. anthropic/claude-sonnet-4.5, openai/gpt-4o-mini).`
+        `(e.g. google/gemini-3.1-flash-lite, openai/gpt-4o-mini).`
       );
     }
     throw new Error('Could not parse model response as JSON: ' + e.message);
