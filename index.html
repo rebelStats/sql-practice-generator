@@ -352,6 +352,52 @@
     cursor: pointer;
   }
   .example-chip:hover { background: var(--border); color: var(--text); }
+  .tab-bar {
+    display: flex;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .tab-bar button {
+    flex: 1;
+    background: transparent;
+    color: var(--text-dim);
+    border: none;
+    padding: 11px 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    transition: color .15s, background .15s;
+  }
+  .tab-bar button:hover { color: var(--text); background: var(--panel-2); }
+  .tab-bar button.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+    background: var(--bg);
+  }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+  .small-select, .small-input {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-family: inherit;
+    font-size: 13px;
+    width: 100%;
+  }
+  .small-select { cursor: pointer; }
+  .field-grid { display: grid; gap: 8px; margin-bottom: 10px; }
+  .field-grid label {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 2px;
+  }
   .chat-panel {
     flex-shrink: 0;
     height: 320px;
@@ -478,8 +524,15 @@
   </header>
   <div class="main">
     <aside class="sidebar">
-      <div class="section">
-        <h2>1. Describe a problem</h2>
+      <div class="tab-bar">
+        <button class="tab-btn active" data-tab="generate">Generate</button>
+        <button class="tab-btn" data-tab="company">By Company</button>
+        <button class="tab-btn" data-tab="learn">Learn</button>
+      </div>
+
+      <!-- TAB 1: Generate from prompt -->
+      <div class="section tab-content active" data-tab-content="generate">
+        <h2>Describe a problem</h2>
         <textarea id="prompt" rows="4" placeholder="e.g. I want to practice window functions for ranking products by sales within each category"></textarea>
         <div class="examples">
           <span class="example-chip" data-text="I want to practice JOINs across customers, orders, and order_items.">JOINs</span>
@@ -503,6 +556,65 @@
           <button id="resetBtn" class="secondary">Reset</button>
         </div>
         <div id="genStatus" style="margin-top: 8px;"></div>
+      </div>
+
+      <!-- TAB 2: By Company -->
+      <div class="section tab-content" data-tab-content="company">
+        <h2>Pick a company &amp; role</h2>
+        <div class="field-grid">
+          <div>
+            <label for="companySelect">Company</label>
+            <select id="companySelect" class="small-select"></select>
+            <input id="companyCustom" class="small-input" placeholder="Type a company name" style="display:none; margin-top:6px;" />
+          </div>
+          <div>
+            <label for="positionSelect">Role</label>
+            <select id="positionSelect" class="small-select"></select>
+            <input id="positionCustom" class="small-input" placeholder="Type a role" style="display:none; margin-top:6px;" />
+          </div>
+        </div>
+        <div class="row" style="margin-top: 6px;">
+          <button id="genCompanyBtn">Generate</button>
+          <button id="regenCompanyBtn" class="secondary" title="Force a fresh problem instead of cached">Regenerate</button>
+        </div>
+        <div id="companyStatus" style="margin-top: 8px;"></div>
+        <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border);">
+          <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">Cached for this combo</div>
+          <div id="cachedList" style="font-size: 12px; color: var(--text-dim);">None yet — generate one to cache it.</div>
+        </div>
+        <p style="margin-top: 12px; color: var(--text-dim); font-size: 11px; line-height: 1.4;">
+          Problems are tailored to the company's typical interview patterns and data domain (e.g. ride/delivery for Uber, social graph for Meta, ads for Google). First generation hits the API; subsequent loads come from your browser's local cache.
+        </p>
+      </div>
+
+      <!-- TAB 3: Learn -->
+      <div class="section tab-content" data-tab-content="learn">
+        <h2>Learn a SQL concept</h2>
+        <div class="examples">
+          <span class="example-chip" data-topic="Window functions: ROW_NUMBER, RANK, DENSE_RANK">Window functions</span>
+          <span class="example-chip" data-topic="LAG and LEAD for time-series comparisons">LAG / LEAD</span>
+          <span class="example-chip" data-topic="Common Table Expressions (WITH clause)">CTEs</span>
+          <span class="example-chip" data-topic="Recursive CTEs">Recursive CTEs</span>
+          <span class="example-chip" data-topic="JOIN types: INNER, LEFT, RIGHT, FULL OUTER">JOINs</span>
+          <span class="example-chip" data-topic="GROUP BY and HAVING with aggregates">GROUP BY / HAVING</span>
+          <span class="example-chip" data-topic="Self joins">Self-joins</span>
+          <span class="example-chip" data-topic="Subqueries and EXISTS / NOT EXISTS">Subqueries</span>
+          <span class="example-chip" data-topic="CASE expressions for pivoting">CASE / Pivot</span>
+          <span class="example-chip" data-topic="PostgreSQL date functions: EXTRACT, DATE_TRUNC, INTERVAL">Date functions</span>
+          <span class="example-chip" data-topic="Sessionization with LAG and running SUM">Sessionization</span>
+          <span class="example-chip" data-topic="Top N per group">Top N per group</span>
+          <span class="example-chip" data-topic="Running totals and moving averages">Running totals</span>
+          <span class="example-chip" data-topic="NULL handling: COALESCE, NULLIF, IS NULL">NULL handling</span>
+        </div>
+        <textarea id="learnInput" rows="2" placeholder="Or type your own topic / question..." style="margin-top: 10px;"></textarea>
+        <div class="row" style="margin-top: 10px;">
+          <button id="learnBtn">Start lesson</button>
+          <button id="walkthroughBtn" class="secondary" title="Walk through the current problem step by step">Walk through current problem</button>
+        </div>
+        <div id="learnStatus" style="margin-top: 8px;"></div>
+        <p style="margin-top: 10px; color: var(--text-dim); font-size: 11px; line-height: 1.4;">
+          A focused lesson loads in the chat below, with a small practice problem above so you can apply what you learn.
+        </p>
       </div>
       <div class="sidebar-scroll">
       <div class="section" id="scenarioSection" style="display:none;">
@@ -734,9 +846,207 @@ ORDER BY user_id, session_start;`
 
 document.querySelectorAll('.example-chip').forEach(chip => {
   chip.addEventListener('click', () => {
-    $('prompt').value = chip.dataset.text;
+    if (chip.dataset.text) $('prompt').value = chip.dataset.text;
+    if (chip.dataset.topic) $('learnInput').value = chip.dataset.topic;
   });
 });
+
+// ----- Tabs -----
+function switchTab(tabName) {
+  document.querySelectorAll('.tab-bar .tab-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === tabName);
+  });
+  document.querySelectorAll('.tab-content').forEach(c => {
+    c.classList.toggle('active', c.dataset.tabContent === tabName);
+  });
+  localStorage.setItem('current_tab', tabName);
+}
+document.querySelectorAll('.tab-bar .tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+});
+switchTab(localStorage.getItem('current_tab') || 'generate');
+
+// ----- Company tab -----
+const COMPANIES = ['Google','Meta','Apple','Amazon','Microsoft','Netflix','Stripe','Airbnb','Uber','Lyft','LinkedIn','Salesforce','Adobe','NVIDIA','Tesla','Anthropic','OpenAI','Snowflake','Databricks','Spotify','Pinterest','Reddit','Shopify','DoorDash','Instacart','Robinhood','Block (Square)','Bloomberg','Two Sigma','Citadel','Goldman Sachs','JPMorgan','Capital One','Visa','Mastercard','PayPal','Walmart','Target'];
+const POSITIONS = ['Data Analyst','Data Scientist','Data Engineer','Analytics Engineer','BI Analyst','Software Engineer (Backend)','ML Engineer','Quantitative Analyst','Product Analyst','Marketing Analyst'];
+
+function populateCompanyOptions() {
+  const cs = $('companySelect');
+  cs.innerHTML = COMPANIES.map(c => `<option value="${c}">${c}</option>`).join('') + '<option value="__custom__">Other (custom)…</option>';
+  cs.value = localStorage.getItem('company_last') || COMPANIES[0];
+  $('companyCustom').value = localStorage.getItem('company_custom') || '';
+  $('companyCustom').style.display = cs.value === '__custom__' ? '' : 'none';
+
+  const ps = $('positionSelect');
+  ps.innerHTML = POSITIONS.map(p => `<option value="${p}">${p}</option>`).join('') + '<option value="__custom__">Other (custom)…</option>';
+  ps.value = localStorage.getItem('position_last') || POSITIONS[0];
+  $('positionCustom').value = localStorage.getItem('position_custom') || '';
+  $('positionCustom').style.display = ps.value === '__custom__' ? '' : 'none';
+
+  cs.addEventListener('change', () => {
+    localStorage.setItem('company_last', cs.value);
+    $('companyCustom').style.display = cs.value === '__custom__' ? '' : 'none';
+    refreshCachedListUI();
+  });
+  ps.addEventListener('change', () => {
+    localStorage.setItem('position_last', ps.value);
+    $('positionCustom').style.display = ps.value === '__custom__' ? '' : 'none';
+    refreshCachedListUI();
+  });
+  $('companyCustom').addEventListener('input', () => {
+    localStorage.setItem('company_custom', $('companyCustom').value);
+    refreshCachedListUI();
+  });
+  $('positionCustom').addEventListener('input', () => {
+    localStorage.setItem('position_custom', $('positionCustom').value);
+    refreshCachedListUI();
+  });
+}
+populateCompanyOptions();
+
+function getCompany() {
+  const v = $('companySelect').value;
+  return v === '__custom__' ? ($('companyCustom').value.trim() || 'Acme Corp') : v;
+}
+function getPosition() {
+  const v = $('positionSelect').value;
+  return v === '__custom__' ? ($('positionCustom').value.trim() || 'Data Analyst') : v;
+}
+function companyCacheKey(company, position) {
+  return `cp_${company.toLowerCase().replace(/\s+/g,'_')}_${position.toLowerCase().replace(/\s+/g,'_')}`;
+}
+function refreshCachedListUI() {
+  const company = getCompany(), position = getPosition();
+  const key = companyCacheKey(company, position);
+  const has = localStorage.getItem(key);
+  $('cachedList').innerHTML = has
+    ? `<span style="color: var(--green);">✓ Cached for ${escapeHtml(company)} / ${escapeHtml(position)} — Generate will load instantly.</span>`
+    : `No cache for ${escapeHtml(company)} / ${escapeHtml(position)} yet.`;
+}
+refreshCachedListUI();
+
+$('genCompanyBtn').addEventListener('click', () => generateCompanyProblem(false));
+$('regenCompanyBtn').addEventListener('click', () => generateCompanyProblem(true));
+
+async function generateCompanyProblem(forceRefresh) {
+  await dbReady;
+  const company = getCompany(), position = getPosition();
+  const key = companyCacheKey(company, position);
+  const cached = !forceRefresh ? localStorage.getItem(key) : null;
+  if (cached) {
+    try {
+      const problem = JSON.parse(cached);
+      await loadProblemObject(problem);
+      $('companyStatus').innerHTML = `<span class="success">✓ Loaded cached ${escapeHtml(company)} / ${escapeHtml(position)} problem.</span>`;
+      return;
+    } catch {}
+  }
+  if (!getApiKey()) { alert(`Add your ${getProviderName()} API key in the top right.`); return; }
+  const prompt = `Generate a SQL interview problem typical of ${company} for the ${position} role.
+
+Tailor the problem to ${company}'s actual data domain and the kinds of questions they're known to ask in interviews. For example:
+- Uber/Lyft: trips, drivers, surge pricing, driver/rider matching
+- Meta/LinkedIn/Reddit: users, posts, friend graphs, engagement
+- Amazon/Shopify/DoorDash: orders, products, sellers, deliveries
+- Google: ads, search queries, sessions, A/B tests
+- Netflix/Spotify: viewing/listening sessions, recommendations
+- Stripe/Square/PayPal: payments, merchants, fraud signals
+- Banks/HFTs: trades, accounts, portfolios, returns
+Use realistic schemas and realistic data. Match the difficulty to what would be asked of a ${position} (entry-mid for Analyst, harder for Engineer/Scientist).`;
+  $('companyStatus').innerHTML = '<span class="loading"><span class="spinner"></span>Generating ' + escapeHtml(company) + ' / ' + escapeHtml(position) + ' problem…</span>';
+  $('genCompanyBtn').disabled = true; $('regenCompanyBtn').disabled = true;
+  if (activeAbort) activeAbort.abort();
+  const ctrl = new AbortController(); activeAbort = ctrl;
+  try {
+    const problem = await callClaude(prompt, ctrl.signal);
+    if (ctrl.signal.aborted) return;
+    await loadProblemObject(problem);
+    localStorage.setItem(key, JSON.stringify(problem));
+    refreshCachedListUI();
+    $('companyStatus').innerHTML = `<span class="success">✓ Generated and cached ${escapeHtml(company)} / ${escapeHtml(position)} problem.</span>`;
+  } catch (e) {
+    if (e.name === 'AbortError' || ctrl.signal.aborted) {
+      $('companyStatus').innerHTML = '<span style="color: var(--text-dim); font-size: 13px;">Cancelled.</span>';
+      return;
+    }
+    $('companyStatus').innerHTML = `<div class="error">${escapeHtml(e.message)}</div>`;
+  } finally {
+    if (activeAbort === ctrl) activeAbort = null;
+    $('genCompanyBtn').disabled = false; $('regenCompanyBtn').disabled = false;
+  }
+}
+
+async function loadProblemObject(problem) {
+  await dropCurrentTables();
+  currentProblem = problem;
+  resetChat();
+  await buildDatabase(problem);
+  await renderProblem(problem);
+}
+
+// ----- Learn tab -----
+$('learnBtn').addEventListener('click', startLesson);
+$('walkthroughBtn').addEventListener('click', walkThroughCurrent);
+$('learnInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    startLesson();
+  }
+});
+
+async function startLesson() {
+  const topic = $('learnInput').value.trim();
+  if (!topic) { alert('Pick a topic chip or type one in.'); return; }
+  if (!getApiKey()) { alert(`Add your ${getProviderName()} API key in the top right.`); return; }
+  await dbReady;
+
+  $('learnStatus').innerHTML = '<span class="loading"><span class="spinner"></span>Building lesson…</span>';
+  $('learnBtn').disabled = true;
+  if (activeAbort) activeAbort.abort();
+  const ctrl = new AbortController(); activeAbort = ctrl;
+  try {
+    const prompt = `Generate a SHORT teaching-oriented PostgreSQL practice problem focused on this concept: "${topic}".
+The scenario should be a small, focused exercise (not interview-grade complexity) — just enough to apply the concept once or twice. Tables should be small (~30-60 rows). The hint should explain WHEN you'd use this concept. The solution should be the cleanest idiomatic Postgres.`;
+    const problem = await callClaude(prompt, ctrl.signal);
+    if (ctrl.signal.aborted) return;
+    await loadProblemObject(problem);
+    // Seed the chat with an explanation
+    const intro = `You're about to learn: **${topic}**. Read the scenario above, then we'll walk through it.`;
+    appendChatMessage('assistant', intro);
+    chatHistory.push({ role: 'assistant', content: intro });
+    // Then ask the model for an actual concept explanation as a follow-up
+    chatHistory.push({ role: 'user', content: `Briefly explain the concept "${topic}" in 3-5 sentences, focusing on when and why to use it. Then describe how I would approach the scenario above.` });
+    const loading = appendChatMessage('assistant', '…');
+    loading.innerHTML = '<span class="spinner"></span> Thinking…';
+    try {
+      const reply = await callChatClaude();
+      loading.remove();
+      chatHistory.push({ role: 'assistant', content: reply });
+      appendChatMessage('assistant', reply);
+    } catch (e) {
+      loading.remove();
+      appendChatMessage('assistant', `Error: ${e.message}`);
+    }
+    $('learnStatus').innerHTML = `<span class="success">✓ Lesson loaded. Read the scenario, then chat below.</span>`;
+  } catch (e) {
+    if (e.name === 'AbortError' || ctrl.signal.aborted) {
+      $('learnStatus').innerHTML = '<span style="color: var(--text-dim); font-size: 13px;">Cancelled.</span>';
+      return;
+    }
+    $('learnStatus').innerHTML = `<div class="error">${escapeHtml(e.message)}</div>`;
+  } finally {
+    if (activeAbort === ctrl) activeAbort = null;
+    $('learnBtn').disabled = false;
+  }
+}
+
+async function walkThroughCurrent() {
+  if (!currentProblem) { alert('Load a problem first.'); return; }
+  if (!getApiKey()) { alert(`Add your ${getProviderName()} API key in the top right.`); return; }
+  const userMsg = 'Walk me through how to solve this problem step by step. For each step, explain the reasoning and show the SQL fragment, then build up to the full solution.';
+  $('chatInput').value = userMsg;
+  await sendChatMessage();
+}
 
 $('generateBtn').addEventListener('click', generate);
 $('resetBtn').addEventListener('click', resetAll);
