@@ -6,6 +6,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/sql/sql.min.js"></script>
+<script src="company_profiles.js"></script>
 <style>
   :root {
     --bg: #0f1419;
@@ -577,13 +578,14 @@
           <button id="genCompanyBtn">Generate</button>
           <button id="regenCompanyBtn" class="secondary" title="Force a fresh problem instead of cached">Regenerate</button>
         </div>
+        <div id="profileBadge" style="margin-top: 8px; font-size: 11px;"></div>
         <div id="companyStatus" style="margin-top: 8px;"></div>
         <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border);">
           <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">Cached for this combo</div>
           <div id="cachedList" style="font-size: 12px; color: var(--text-dim);">None yet — generate one to cache it.</div>
         </div>
         <p style="margin-top: 12px; color: var(--text-dim); font-size: 11px; line-height: 1.4;">
-          Problems are tailored to the company's typical interview patterns and data domain (e.g. ride/delivery for Uber, social graph for Meta, ads for Google). First generation hits the API; subsequent loads come from your browser's local cache.
+          Problems are grounded in researched profiles of each company's actual SQL interview patterns, data domain, and stack (when a profile exists for the selection). First generation hits the API; subsequent loads come from your browser's local cache.
         </p>
       </div>
 
@@ -922,8 +924,62 @@ function refreshCachedListUI() {
   $('cachedList').innerHTML = has
     ? `<span style="color: var(--green);">✓ Cached for ${escapeHtml(company)} / ${escapeHtml(position)} — Generate will load instantly.</span>`
     : `No cache for ${escapeHtml(company)} / ${escapeHtml(position)} yet.`;
+  refreshProfileBadge();
+}
+function refreshProfileBadge() {
+  const company = getCompany();
+  const profile = (window.COMPANY_PROFILES || {})[company];
+  if (profile) {
+    $('profileBadge').innerHTML = `<span style="color: var(--green); background: rgba(108, 184, 120, 0.12); border: 1px solid rgba(108, 184, 120, 0.4); padding: 2px 8px; border-radius: 10px;">✓ Profile-grounded for ${escapeHtml(company)}</span>`;
+  } else {
+    $('profileBadge').innerHTML = `<span style="color: var(--text-dim); background: var(--panel-2); border: 1px solid var(--border); padding: 2px 8px; border-radius: 10px;">Generic LLM (no profile for this company)</span>`;
+  }
 }
 refreshCachedListUI();
+
+function buildCompanyPrompt(company, position) {
+  const profile = (window.COMPANY_PROFILES || {})[company];
+  if (!profile) {
+    return `Generate a SQL interview problem typical of ${company} for the ${position} role.
+
+Tailor the problem to ${company}'s actual data domain. Use realistic schemas and data. Match the difficulty to what would be asked of a ${position} (entry-mid for Analyst roles, harder for Engineer roles).`;
+  }
+  const patterns = (profile.common_question_patterns || []).map(p => `  - ${p}`).join('\n');
+  const themes = (profile.typical_table_themes || []).map(t => `  - ${t}`).join('\n');
+  const examples = (profile.real_question_examples || []).map(e => `  - ${e}`).join('\n');
+  const roleNote = (profile.role_specific_notes || {})[position] || '(no role-specific note)';
+  return `Generate a SQL interview problem in the authentic style of ${company} for the ${position} role.
+
+== ${company} INTERVIEW PROFILE (researched from public sources) ==
+
+Data domain: ${profile.data_domain}
+
+Data stack: ${profile.data_stack}
+
+Interview difficulty: ${profile.interview_difficulty}
+
+Interview style: ${profile.interview_style}
+
+Common question patterns at ${company}:
+${patterns}
+
+Typical table themes:
+${themes}
+
+Representative real example questions (for inspiration — don't copy verbatim):
+${examples}
+
+For the ${position} role specifically at ${company}:
+${roleNote}
+
+== GENERATION INSTRUCTIONS ==
+
+Use this profile to make the problem feel authentic:
+- Pick a table theme from the list above (don't invent a domain that ${company} doesn't work in)
+- Apply a question pattern that ${company} actually asks
+- Tune the difficulty and style to match what they're known for, especially for the ${position} role
+- The generated scenario should plausibly come from ${company}'s real data — names, products, metrics should fit their business`;
+}
 
 $('genCompanyBtn').addEventListener('click', () => generateCompanyProblem(false));
 $('regenCompanyBtn').addEventListener('click', () => generateCompanyProblem(true));
@@ -942,17 +998,7 @@ async function generateCompanyProblem(forceRefresh) {
     } catch {}
   }
   if (!getApiKey()) { alert(`Add your ${getProviderName()} API key in the top right.`); return; }
-  const prompt = `Generate a SQL interview problem typical of ${company} for the ${position} role.
-
-Tailor the problem to ${company}'s actual data domain and the kinds of questions they're known to ask in interviews. For example:
-- Uber/Lyft: trips, drivers, surge pricing, driver/rider matching
-- Meta/LinkedIn/Reddit: users, posts, friend graphs, engagement
-- Amazon/Shopify/DoorDash: orders, products, sellers, deliveries
-- Google: ads, search queries, sessions, A/B tests
-- Netflix/Spotify: viewing/listening sessions, recommendations
-- Stripe/Square/PayPal: payments, merchants, fraud signals
-- Banks/HFTs: trades, accounts, portfolios, returns
-Use realistic schemas and realistic data. Match the difficulty to what would be asked of a ${position} (entry-mid for Analyst, harder for Engineer/Scientist).`;
+  const prompt = buildCompanyPrompt(company, position);
   $('companyStatus').innerHTML = '<span class="loading"><span class="spinner"></span>Generating ' + escapeHtml(company) + ' / ' + escapeHtml(position) + ' problem…</span>';
   $('genCompanyBtn').disabled = true; $('regenCompanyBtn').disabled = true;
   if (activeAbort) activeAbort.abort();
