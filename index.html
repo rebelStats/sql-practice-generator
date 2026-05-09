@@ -380,6 +380,104 @@
   }
   .tab-content { display: none; }
   .tab-content.active { display: block; }
+  .tab-badge {
+    display: inline-block;
+    margin-left: 5px;
+    background: var(--accent);
+    color: white;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 8px;
+    min-width: 14px;
+    line-height: 14px;
+    text-align: center;
+  }
+  .tab-badge:empty { display: none; }
+  .hint-tier {
+    margin-top: 6px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--blue);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .hint-tier summary {
+    padding: 6px 10px;
+    font-size: 13px;
+    color: var(--text);
+    background: rgba(97, 175, 239, 0.06);
+    list-style: none;
+  }
+  .hint-tier summary::-webkit-details-marker { display: none; }
+  .hint-tier summary::before {
+    content: '▸ ';
+    color: var(--text-dim);
+    font-size: 10px;
+  }
+  .hint-tier[open] summary::before { content: '▾ '; }
+  .hint-tier .hint-body {
+    padding: 8px 12px 10px 12px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-dim);
+    border-top: 1px solid var(--border);
+  }
+  .hint-tier .hint-label {
+    color: var(--text-dim);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-right: 6px;
+  }
+  .review-item {
+    padding: 8px 10px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin-bottom: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+  .review-item .ri-meta {
+    flex: 1;
+    min-width: 0;
+  }
+  .review-item .ri-title {
+    color: var(--text);
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .review-item .ri-due {
+    color: var(--text-dim);
+    font-size: 11px;
+    margin-top: 2px;
+  }
+  .review-item .ri-due.overdue { color: var(--accent); }
+  .review-item button {
+    flex-shrink: 0;
+    padding: 4px 10px;
+    font-size: 12px;
+  }
+  .review-empty {
+    color: var(--text-dim);
+    font-size: 12px;
+    font-style: italic;
+    padding: 8px 0;
+  }
+  .review-mode-banner {
+    background: rgba(217, 119, 87, 0.12);
+    border: 1px solid rgba(217, 119, 87, 0.4);
+    color: var(--accent);
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    margin-bottom: 8px;
+  }
   .small-select, .small-input {
     background: var(--panel-2);
     color: var(--text);
@@ -529,6 +627,7 @@
         <button class="tab-btn active" data-tab="generate">Generate</button>
         <button class="tab-btn" data-tab="company">By Company</button>
         <button class="tab-btn" data-tab="learn">Learn</button>
+        <button class="tab-btn" data-tab="review">Review<span class="tab-badge" id="reviewBadge"></span></button>
       </div>
 
       <!-- TAB 1: Generate from prompt -->
@@ -618,16 +717,33 @@
           A focused lesson loads in the chat below, with a small practice problem above so you can apply what you learn.
         </p>
       </div>
+
+      <!-- TAB 4: Review (spaced repetition) -->
+      <div class="section tab-content" data-tab-content="review">
+        <h2>Spaced repetition queue</h2>
+        <p style="color: var(--text-dim); font-size: 12px; line-height: 1.5; margin: 0 0 10px 0;">
+          Every problem you attempt is auto-saved here. Items resurface on a schedule that adapts to how well you did — got it cold = longer wait, needed hints or solution = sooner. The fastest path to interview-ready.
+        </p>
+        <div id="reviewSummary" style="font-size: 13px; margin-bottom: 10px;"></div>
+        <div class="row" style="margin-bottom: 8px;">
+          <button id="reviewNextBtn">Start next review</button>
+          <button id="reviewClearBtn" class="secondary" title="Permanently delete all saved review items">Clear all</button>
+        </div>
+        <div id="reviewListSection" style="margin-top: 14px;">
+          <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">Due now</div>
+          <div id="reviewDueList" style="font-size: 12px;"></div>
+          <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin: 14px 0 6px 0;">Coming up (next 7 days)</div>
+          <div id="reviewUpcomingList" style="font-size: 12px;"></div>
+        </div>
+      </div>
+
       <div class="sidebar-scroll">
       <div class="section" id="scenarioSection" style="display:none;">
         <h2>Scenario</h2>
         <div class="scenario-box" id="scenarioText"></div>
-        <details>
-          <summary>Hint</summary>
-          <div class="hint" id="hintText"></div>
-        </details>
+        <div id="hintsContainer" style="margin-top: 4px;"></div>
         <details style="margin-top: 6px;">
-          <summary>Show solution</summary>
+          <summary id="solutionSummary">Show solution</summary>
           <div class="solution-box"><pre id="solutionText"></pre></div>
         </details>
       </div>
@@ -815,7 +931,11 @@ Write a SQL query to assign a unique session_id per user. For each session, retu
 );`,
       insertSql: `INSERT INTO siri_events (user_id, event_timestamp, event_type) VALUES\n${valuesSql};`
     }],
-    hint: 'Use LAG() to get the previous event timestamp per user. Mark a new session whenever the gap exceeds 30 minutes (1800 seconds). Then use a running SUM of that marker as the session_id.',
+    hints: [
+      "Think about what 'a new session starts' means: the gap between consecutive events for the same user crosses some threshold. You'll need to compare each event to the one before it within the same user.",
+      "Step 1: Use LAG(event_timestamp) OVER (PARTITION BY user_id ORDER BY event_timestamp) to get each row's previous timestamp.\nStep 2: For each row, compute a 0/1 flag — 1 if the gap to the previous row exceeds 30 minutes (or if there is no previous row), 0 otherwise.\nStep 3: Take a running SUM of that flag, partitioned by user, ordered by timestamp — that running sum IS the session_id.\nStep 4: GROUP BY user_id and session_id, and aggregate.",
+      "Skeleton:\n```sql\nWITH ordered AS (\n  SELECT user_id, event_timestamp,\n         LAG(event_timestamp) OVER (PARTITION BY user_id ORDER BY event_timestamp) AS prev_ts\n  FROM siri_events\n),\nmarked AS (\n  SELECT user_id, event_timestamp,\n         SUM(CASE WHEN prev_ts IS NULL OR EXTRACT(EPOCH FROM (event_timestamp - prev_ts)) > 1800 THEN 1 ELSE 0 END)\n           OVER (PARTITION BY user_id ORDER BY event_timestamp) AS session_id\n  FROM ordered\n)\nSELECT user_id, session_id,\n       MIN(event_timestamp) AS session_start,\n       MAX(event_timestamp) AS session_end,\n       COUNT(*) AS event_count,\n       EXTRACT(EPOCH FROM (MAX(event_timestamp) - MIN(event_timestamp)))::INTEGER AS session_duration_seconds\nFROM marked\nGROUP BY user_id, session_id\nORDER BY user_id, session_start;\n```"
+    ],
     solution: `WITH ordered AS (
   SELECT
     user_id,
@@ -1140,6 +1260,10 @@ async function generate() {
   await dbReady;
   if (!db) { alert('Database failed to load.'); return; }
 
+  // Fresh problem incoming — clear any prior review item / hint tier tracking
+  if (typeof resetAttemptTracking === 'function') resetAttemptTracking();
+  currentReviewItemId = null;
+
   if (activeAbort) activeAbort.abort();
   const ctrl = new AbortController();
   activeAbort = ctrl;
@@ -1185,7 +1309,11 @@ Return ONLY a JSON object with this exact shape (no markdown fences, no prose):
       "insertSql": "INSERT INTO ... VALUES (...), (...), ... ;  (one or more INSERT statements; AT LEAST ${rowCount} rows per table)"
     }
   ],
-  "hint": "A brief hint about the SQL technique to use",
+  "hints": [
+    "TIER 1 — a nudge: 1-2 sentences pointing at the right concept without giving the structure (e.g. 'Think about how to assign a session id when gaps exceed a threshold.')",
+    "TIER 2 — an outline: 3-5 sentences walking through the steps (use LAG to get previous row, compute a 0/1 flag for new session, take running SUM, group by). No SQL syntax, just the plan.",
+    "TIER 3 — a skeleton: a partially-filled SQL skeleton inside a fenced code block, with TODO placeholders for the user to fill in. NOT the full solution — leave the trickiest parts as TODO comments."
+  ],
   "solution": "A complete PostgreSQL SELECT that solves the scenario"
 }
 
@@ -1251,10 +1379,38 @@ async function buildDatabase(problem) {
   }
 }
 
+function getProblemHints(problem) {
+  if (Array.isArray(problem.hints) && problem.hints.length) return problem.hints;
+  if (typeof problem.hint === 'string' && problem.hint.trim()) return [problem.hint];
+  return ['(no hint provided)'];
+}
+
+function renderHints(problem) {
+  const hints = getProblemHints(problem);
+  const container = $('hintsContainer');
+  const labels = ['Nudge', 'Outline', 'Skeleton'];
+  container.innerHTML = '';
+  hints.forEach((h, i) => {
+    const tier = i + 1;
+    const wrap = document.createElement('details');
+    wrap.className = 'hint-tier';
+    wrap.dataset.tier = tier;
+    const label = labels[i] || `Hint ${tier}`;
+    wrap.innerHTML = `
+      <summary><span class="hint-label">Hint ${tier} · ${escapeHtml(label)}</span></summary>
+      <div class="hint-body">${formatChatContent(h)}</div>
+    `;
+    wrap.addEventListener('toggle', () => {
+      if (wrap.open) onHintOpened(tier);
+    });
+    container.appendChild(wrap);
+  });
+}
+
 async function renderProblem(problem) {
   $('scenarioSection').style.display = 'block';
   $('scenarioText').textContent = problem.scenario;
-  $('hintText').textContent = problem.hint || '(no hint provided)';
+  renderHints(problem);
   $('solutionText').textContent = problem.solution || '(no solution provided)';
 
   const list = $('schemaList');
@@ -1371,11 +1527,14 @@ async function checkSolution() {
     renderResults(userRes);
     if (matches) {
       $('results').insertAdjacentHTML('afterbegin', `<div class="success" style="margin-bottom: 10px;">✓ Matches reference solution (${userRows.length} rows).</div>`);
+      recordAttemptOutcome('correct');
     } else {
       $('results').insertAdjacentHTML('afterbegin', `<div class="error" style="margin-bottom: 10px;">✗ Result differs (yours: ${userRows.length} rows, expected: ${refRows.length} rows). Ordering is ignored; column order and values must match the reference.</div>`);
+      recordAttemptOutcome('incorrect');
     }
   } catch (e) {
     showError(e.message);
+    recordAttemptOutcome('incorrect');
   }
 }
 
@@ -1551,6 +1710,234 @@ async function callLLM({ system, messages, maxTokens, signal }) {
     clearTimeout(timeout);
   }
 }
+
+// ===== Spaced repetition system =====
+
+const REVIEW_KEY = 'sql_review_items_v1';
+const ONE_DAY_MS = 86400 * 1000;
+let currentReviewItemId = null;          // ID of currently-loaded review item, if any
+let currentAttemptHintsUsed = 0;          // tracks max hint tier opened during current attempt
+
+function loadReviewStore() {
+  try {
+    return JSON.parse(localStorage.getItem(REVIEW_KEY) || '{}');
+  } catch { return {}; }
+}
+function saveReviewStore(store) {
+  localStorage.setItem(REVIEW_KEY, JSON.stringify(store));
+}
+function uuidShort() {
+  return 'r_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+}
+
+// Compute next review interval (in days) given outcome + hints used.
+// Simple SM-2-inspired: rewards clean solves, resets on misses or heavy hint use.
+function nextInterval(prevIntervalDays, outcome, hintsUsed) {
+  const prev = prevIntervalDays || 1;
+  if (outcome === 'incorrect' || outcome === 'gave-up') return 1;
+  if (hintsUsed >= 3) return 1;
+  if (hintsUsed === 2) return Math.min(Math.max(prev * 1.3, 1), 30);
+  if (hintsUsed === 1) return Math.min(Math.max(prev * 1.8, 2), 30);
+  return Math.min(Math.max(prev * 2.5, 2), 30); // hintsUsed === 0
+}
+
+function shortTitle(scenario, max = 70) {
+  const s = (scenario || '').replace(/\s+/g, ' ').trim();
+  return s.length > max ? s.slice(0, max - 1) + '…' : s;
+}
+
+// Save the current problem to the review store on first attempt; return the item ID.
+function ensureCurrentSavedToReview() {
+  if (!currentProblem) return null;
+  if (currentReviewItemId) return currentReviewItemId;
+  const store = loadReviewStore();
+  const id = uuidShort();
+  store[id] = {
+    id,
+    title: shortTitle(currentProblem.scenario),
+    problem: {
+      scenario: currentProblem.scenario,
+      tables: currentProblem.tables,
+      hints: getProblemHints(currentProblem),
+      solution: currentProblem.solution,
+      company: currentProblem.company || null,
+      position: currentProblem.position || null
+    },
+    createdAt: Date.now(),
+    intervalDays: 1,
+    nextReviewAt: Date.now(), // due now until first attempt logged
+    attempts: []
+  };
+  saveReviewStore(store);
+  currentReviewItemId = id;
+  return id;
+}
+
+function recordAttemptOutcome(outcome) {
+  const id = ensureCurrentSavedToReview();
+  if (!id) return;
+  const store = loadReviewStore();
+  const item = store[id];
+  if (!item) return;
+  const interval = nextInterval(item.intervalDays, outcome, currentAttemptHintsUsed);
+  item.attempts.push({
+    ts: Date.now(),
+    outcome,
+    hintsUsed: currentAttemptHintsUsed,
+    intervalAfter: interval
+  });
+  item.intervalDays = interval;
+  item.nextReviewAt = Date.now() + interval * ONE_DAY_MS;
+  saveReviewStore(store);
+  refreshReviewTabUI();
+  showReviewToast(outcome, interval, currentAttemptHintsUsed);
+}
+
+function showReviewToast(outcome, intervalDays, hintsUsed) {
+  const niceInterval = intervalDays >= 1
+    ? `${Math.round(intervalDays)} day${Math.round(intervalDays) === 1 ? '' : 's'}`
+    : 'soon';
+  const note = outcome === 'correct'
+    ? `✓ Logged. Next review in ${niceInterval}${hintsUsed ? ` (used ${hintsUsed} hint${hintsUsed === 1 ? '' : 's'})` : ' — clean solve!'}.`
+    : `Logged. Resurfacing tomorrow for another shot.`;
+  const div = document.createElement('div');
+  div.style.cssText = 'margin-top: 8px; padding: 6px 10px; background: var(--panel-2); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 4px; font-size: 12px; color: var(--text-dim);';
+  div.textContent = note;
+  $('results').insertAdjacentElement('afterbegin', div);
+}
+
+function onHintOpened(tier) {
+  if (tier > currentAttemptHintsUsed) currentAttemptHintsUsed = tier;
+}
+
+function resetAttemptTracking() {
+  currentAttemptHintsUsed = 0;
+}
+
+// "Show solution" → mark gave-up
+$('solutionSummary').addEventListener('click', () => {
+  // Use a microtask to fire after toggle
+  setTimeout(() => {
+    const details = $('solutionSummary').parentElement;
+    if (details && details.open && currentProblem) {
+      // Only count it once per attempt
+      if (!currentReviewItemId || currentAttemptHintsUsed < 3) {
+        currentAttemptHintsUsed = Math.max(currentAttemptHintsUsed, 3);
+      }
+    }
+  }, 0);
+});
+
+// `loadProblemObject` is called by generateCompanyProblem and the learn flow.
+// We wrap it (function declarations create writable bindings in modules) so a freshly
+// loaded problem starts a clean attempt record, and review-item loads are tagged.
+// Note: this works because generateCompanyProblem looks up `loadProblemObject` dynamically
+// at call time, by which point the reassignment below has already happened.
+const origLoadProblemObject = loadProblemObject;
+loadProblemObject = async function(problem, opts = {}) {
+  resetAttemptTracking();
+  currentReviewItemId = opts.reviewItemId || null;
+  await origLoadProblemObject(problem);
+};
+
+// ===== Review tab UI =====
+
+function getDueItems() {
+  const store = loadReviewStore();
+  const now = Date.now();
+  return Object.values(store).filter(it => it.nextReviewAt <= now)
+    .sort((a, b) => a.nextReviewAt - b.nextReviewAt);
+}
+function getUpcomingItems(withinDays = 7) {
+  const store = loadReviewStore();
+  const now = Date.now();
+  const cutoff = now + withinDays * ONE_DAY_MS;
+  return Object.values(store).filter(it => it.nextReviewAt > now && it.nextReviewAt <= cutoff)
+    .sort((a, b) => a.nextReviewAt - b.nextReviewAt);
+}
+
+function relativeTimeFromNow(ms) {
+  const diff = ms - Date.now();
+  const abs = Math.abs(diff);
+  const sign = diff < 0 ? 'overdue by ' : 'in ';
+  if (abs < 60_000) return diff < 0 ? 'overdue' : 'now';
+  if (abs < 3_600_000) return `${sign}${Math.round(abs / 60_000)} min`;
+  if (abs < ONE_DAY_MS) return `${sign}${Math.round(abs / 3_600_000)} h`;
+  return `${sign}${Math.round(abs / ONE_DAY_MS)} d`;
+}
+
+function refreshReviewTabUI() {
+  const due = getDueItems();
+  const upcoming = getUpcomingItems(7);
+  const total = Object.keys(loadReviewStore()).length;
+  $('reviewBadge').textContent = due.length > 0 ? String(due.length) : '';
+  $('reviewSummary').innerHTML = total === 0
+    ? '<span style="color: var(--text-dim);">No saved problems yet — attempt one (Check vs solution or open a hint) and it lands here.</span>'
+    : `<strong style="color: var(--text);">${due.length}</strong> <span style="color: var(--text-dim);">due now · ${total} total saved</span>`;
+  $('reviewNextBtn').disabled = due.length === 0;
+
+  $('reviewDueList').innerHTML = due.length === 0
+    ? '<div class="review-empty">Nothing due. Come back later or solve more problems.</div>'
+    : due.map(it => `
+        <div class="review-item">
+          <div class="ri-meta">
+            <div class="ri-title">${escapeHtml(it.title)}</div>
+            <div class="ri-due overdue">${escapeHtml(relativeTimeFromNow(it.nextReviewAt))} · ${it.attempts.length} attempt${it.attempts.length === 1 ? '' : 's'}</div>
+          </div>
+          <button data-load="${it.id}">Start</button>
+        </div>`).join('');
+
+  $('reviewUpcomingList').innerHTML = upcoming.length === 0
+    ? '<div class="review-empty">Nothing scheduled in the next 7 days.</div>'
+    : upcoming.map(it => `
+        <div class="review-item">
+          <div class="ri-meta">
+            <div class="ri-title">${escapeHtml(it.title)}</div>
+            <div class="ri-due">${escapeHtml(relativeTimeFromNow(it.nextReviewAt))} · ${it.attempts.length} attempt${it.attempts.length === 1 ? '' : 's'}</div>
+          </div>
+          <button data-load="${it.id}" class="secondary">Preview</button>
+        </div>`).join('');
+
+  // Wire up Start/Preview buttons
+  document.querySelectorAll('#reviewDueList [data-load], #reviewUpcomingList [data-load]').forEach(b => {
+    b.addEventListener('click', () => loadReviewItem(b.dataset.load));
+  });
+}
+
+async function loadReviewItem(id) {
+  const store = loadReviewStore();
+  const item = store[id];
+  if (!item) return;
+  await dbReady;
+  await loadProblemObject(item.problem, { reviewItemId: id });
+  switchTab('generate'); // jump to main view so they can write SQL
+  const banner = document.createElement('div');
+  banner.className = 'review-mode-banner';
+  const lastSeen = item.attempts.length === 0
+    ? 'never (first attempt)'
+    : new Date(item.attempts[item.attempts.length-1].ts).toLocaleDateString();
+  banner.innerHTML = `🔁 <strong>Review mode</strong> — last seen ${escapeHtml(lastSeen)} (${item.attempts.length} prior attempt${item.attempts.length === 1 ? '' : 's'}). Outcome logs on Check vs solution.`;
+  $('genStatus').innerHTML = '';
+  $('genStatus').appendChild(banner);
+}
+
+$('reviewNextBtn').addEventListener('click', () => {
+  const due = getDueItems();
+  if (due.length === 0) return;
+  loadReviewItem(due[0].id);
+});
+
+$('reviewClearBtn').addEventListener('click', () => {
+  if (!confirm('Permanently delete all saved review items? This cannot be undone.')) return;
+  localStorage.removeItem(REVIEW_KEY);
+  currentReviewItemId = null;
+  refreshReviewTabUI();
+});
+
+// Initial badge population on load
+refreshReviewTabUI();
+// Re-check periodically for items becoming due
+setInterval(refreshReviewTabUI, 60_000);
 </script>
 <script data-goatcounter="https://rebelstats.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 </body>
