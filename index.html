@@ -903,6 +903,7 @@
         <div id="voiceSupportNote" style="margin-top: 8px; font-size: 11px; color: var(--text-dim);"></div>
         <div class="row" style="margin-top: 12px;">
           <button id="startMockBtn">Start mock interview</button>
+          <button id="resetMockBtn" class="secondary" title="Cancel any active mock and clear state so you can start fresh">Reset</button>
         </div>
         <div id="mockStatus" style="margin-top: 8px;"></div>
         <p style="margin-top: 12px; color: var(--text-dim); font-size: 11px; line-height: 1.4;">
@@ -2187,6 +2188,7 @@ populateMockCompany();
 
 $('startMockBtn').addEventListener('click', startMockInterview);
 $('mockEndBtn').addEventListener('click', () => endMockInterview('manual'));
+$('resetMockBtn').addEventListener('click', resetMockInterview);
 $('mockReplayBtn').addEventListener('click', () => {
   if (currentProblem) speak(currentProblem.scenario);
 });
@@ -2402,18 +2404,52 @@ function tickTimer() {
   }
 }
 
-async function endMockInterview(reason) {
-  if (!mockState.active) return;
+// Tear down active-mock UI / timers / voice without showing the post-mortem modal.
+// Used by both endMockInterview (which then shows the modal) and resetMockInterview.
+function teardownActiveMock() {
   mockState.active = false;
-  clearInterval(mockState.tickHandle);
-  mockState.tickHandle = null;
+  if (mockState.tickHandle) {
+    clearInterval(mockState.tickHandle);
+    mockState.tickHandle = null;
+  }
   if (mockState.recognition && mockState.listening) {
     try { mockState.recognition.stop(); } catch {}
   }
+  mockState.listening = false;
   stopSpeaking();
   $('mockBar').style.display = 'none';
   $('mockMicBtn').classList.remove('listening');
+  $('mockMicStatus').textContent = '';
   $('startMockBtn').disabled = false;
+}
+
+async function resetMockInterview() {
+  if (activeAbort) { activeAbort.abort(); activeAbort = null; }
+  teardownActiveMock();
+  // Close any lingering end-of-mock modal
+  const modal = document.getElementById('mockEndModal');
+  if (modal) modal.remove();
+  // Wipe loaded problem and editor state
+  await dropCurrentTables();
+  currentProblem = null;
+  mockState.problemSnapshot = null;
+  resetAttemptTracking();
+  currentReviewItemId = null;
+  chatHistory = [];
+  setSql('');
+  $('schemaList').innerHTML = '<div style="color: var(--text-dim); font-size: 13px; text-align: center; margin-top: 30px;">Generate tables to see the schema here.</div>';
+  $('scenarioSection').style.display = 'none';
+  $('results').innerHTML = '<h3>Results</h3><div style="color: var(--text-dim); font-size: 13px;">Run a query to see results.</div>';
+  $('checkBtn').disabled = true;
+  $('rowInfo').textContent = '';
+  $('genStatus').innerHTML = '';
+  resetChat();
+  $('mockStatus').innerHTML = '<span style="color: var(--text-dim); font-size: 12px;">Reset. Adjust settings and click Start to begin a new mock.</span>';
+}
+
+async function endMockInterview(reason) {
+  if (!mockState.active) return;
+  teardownActiveMock();
 
   const elapsedMs = Date.now() - mockState.startedAt;
   const usedMin = (elapsedMs / 60000).toFixed(1);
