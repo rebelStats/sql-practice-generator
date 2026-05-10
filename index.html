@@ -478,6 +478,123 @@
     font-size: 12px;
     margin-bottom: 8px;
   }
+  /* ===== Mock interview ===== */
+  .mock-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+    background: linear-gradient(90deg, rgba(217,119,87,0.18), rgba(217,119,87,0.06));
+    border-bottom: 1px solid var(--border);
+  }
+  .mock-timer {
+    font-family: var(--mono);
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--accent);
+    min-width: 70px;
+  }
+  .mock-timer.warning { color: #f0a04b; }
+  .mock-timer.danger { color: var(--red); animation: pulse 1s infinite; }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+  }
+  .mock-icon-btn {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .mock-icon-btn:hover { background: var(--border); }
+  .mock-icon-btn.listening {
+    background: var(--red);
+    color: white;
+    border-color: var(--red);
+    animation: pulse 1.2s infinite;
+  }
+  .mock-icon-btn.disabled,
+  .mock-icon-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .mock-status {
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  /* End-of-mock modal */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+  .modal-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px;
+    max-width: 600px;
+    width: 90%;
+    max-height: 85vh;
+    overflow-y: auto;
+  }
+  .modal-card h2 {
+    margin: 0 0 14px 0;
+    font-size: 20px;
+    color: var(--accent);
+  }
+  .modal-card .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 8px;
+    margin: 14px 0;
+  }
+  .modal-card .summary-stat {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    text-align: center;
+  }
+  .modal-card .summary-stat .label {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+  }
+  .modal-card .summary-stat .value {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text);
+    font-family: var(--mono);
+  }
+  .modal-card .critique {
+    background: var(--panel-2);
+    border-left: 3px solid var(--accent);
+    padding: 12px 14px;
+    border-radius: 4px;
+    font-size: 13px;
+    line-height: 1.55;
+    margin-top: 8px;
+  }
+  .modal-card .modal-actions {
+    margin-top: 16px;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+  .interim-transcript {
+    color: var(--text-dim);
+    font-style: italic;
+  }
   .small-select, .small-input {
     background: var(--panel-2);
     color: var(--text);
@@ -628,6 +745,7 @@
         <button class="tab-btn" data-tab="company">By Company</button>
         <button class="tab-btn" data-tab="learn">Learn</button>
         <button class="tab-btn" data-tab="review">Review<span class="tab-badge" id="reviewBadge"></span></button>
+        <button class="tab-btn" data-tab="mock">Mock</button>
       </div>
 
       <!-- TAB 1: Generate from prompt -->
@@ -737,6 +855,61 @@
         </div>
       </div>
 
+      <!-- TAB 5: Mock interview -->
+      <div class="section tab-content" data-tab-content="mock">
+        <h2>Timed mock interview</h2>
+        <p style="color: var(--text-dim); font-size: 12px; line-height: 1.5; margin: 0 0 12px 0;">
+          Practice under realistic pressure. The AI plays your interviewer — answers clarifying questions, listens to you talk through your approach, and gives feedback at the end.
+        </p>
+        <div class="field-grid">
+          <div>
+            <label>Duration</label>
+            <select id="mockDuration" class="small-select">
+              <option value="10">10 min (quick warm-up)</option>
+              <option value="20" selected>20 min (single problem)</option>
+              <option value="30">30 min (full round)</option>
+              <option value="45">45 min (extended round)</option>
+            </select>
+          </div>
+          <div>
+            <label>Source</label>
+            <select id="mockSource" class="small-select">
+              <option value="random">Random topic</option>
+              <option value="company">Specific company</option>
+            </select>
+          </div>
+        </div>
+        <div id="mockCompanyRow" style="display:none;" class="field-grid">
+          <div>
+            <label>Company</label>
+            <select id="mockCompanySelect" class="small-select"></select>
+          </div>
+          <div>
+            <label>Role</label>
+            <select id="mockPositionSelect" class="small-select"></select>
+          </div>
+        </div>
+        <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 6px; font-size: 12px;">
+          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text);">
+            <input type="checkbox" id="mockTtsEnabled" checked /> 🔊 Speak the problem aloud (text-to-speech)
+          </label>
+          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text);">
+            <input type="checkbox" id="mockSttEnabled" checked /> 🎙 Listen when I press the mic button (speech-to-text)
+          </label>
+          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text);">
+            <input type="checkbox" id="mockTtsReplies" checked /> 🔊 Speak interviewer replies aloud
+          </label>
+        </div>
+        <div id="voiceSupportNote" style="margin-top: 8px; font-size: 11px; color: var(--text-dim);"></div>
+        <div class="row" style="margin-top: 12px;">
+          <button id="startMockBtn">Start mock interview</button>
+        </div>
+        <div id="mockStatus" style="margin-top: 8px;"></div>
+        <p style="margin-top: 12px; color: var(--text-dim); font-size: 11px; line-height: 1.4;">
+          During the mock: type SQL on the right, talk through your approach with the mic, ask the interviewer clarifying questions in the chat below. Time's up triggers an auto-critique.
+        </p>
+      </div>
+
       <div class="sidebar-scroll">
       <div class="section" id="scenarioSection" style="display:none;">
         <h2>Scenario</h2>
@@ -768,6 +941,14 @@
       </div>
     </aside>
     <div class="editor">
+      <div class="mock-bar" id="mockBar" style="display:none;">
+        <span class="mock-timer" id="mockTimer">--:--</span>
+        <button id="mockReplayBtn" class="mock-icon-btn" title="Replay scenario aloud">🔊 Replay</button>
+        <button id="mockMicBtn" class="mock-icon-btn" title="Hold to talk (or click to toggle)">🎙 Talk</button>
+        <span class="mock-status" id="mockMicStatus"></span>
+        <span style="flex: 1;"></span>
+        <button id="mockEndBtn" class="secondary">End early</button>
+      </div>
       <div class="editor-toolbar">
         <button id="runBtn">Run query (⌘/Ctrl+Enter)</button>
         <button id="checkBtn" class="secondary" disabled>Check vs solution</button>
@@ -1938,6 +2119,424 @@ $('reviewClearBtn').addEventListener('click', () => {
 refreshReviewTabUI();
 // Re-check periodically for items becoming due
 setInterval(refreshReviewTabUI, 60_000);
+
+// ===== Mock interview =====
+
+const mockState = {
+  active: false,
+  startedAt: 0,
+  durationMin: 20,
+  endsAt: 0,
+  tickHandle: null,
+  ttsEnabled: true,
+  sttEnabled: true,
+  ttsRepliesEnabled: true,
+  recognition: null,
+  listening: false,
+  warned5: false,
+  warned1: false,
+  problemSnapshot: null
+};
+
+// Feature detection
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+const ttsAvailable = ('speechSynthesis' in window);
+const sttAvailable = !!SpeechRecognition;
+
+(function noteVoiceSupport() {
+  const note = $('voiceSupportNote');
+  if (!ttsAvailable && !sttAvailable) {
+    note.innerHTML = '⚠️ Your browser doesn\'t support speech APIs — voice features will be disabled. Try Chrome or Edge.';
+    $('mockTtsEnabled').checked = false; $('mockTtsEnabled').disabled = true;
+    $('mockSttEnabled').checked = false; $('mockSttEnabled').disabled = true;
+    $('mockTtsReplies').checked = false; $('mockTtsReplies').disabled = true;
+  } else if (!sttAvailable) {
+    note.innerHTML = '⚠️ Speech recognition not supported in this browser (Safari/Firefox). Mic button will be disabled — typing still works.';
+    $('mockSttEnabled').checked = false; $('mockSttEnabled').disabled = true;
+  } else if (!ttsAvailable) {
+    note.innerHTML = '⚠️ Text-to-speech not supported in this browser.';
+    $('mockTtsEnabled').checked = false; $('mockTtsEnabled').disabled = true;
+    $('mockTtsReplies').checked = false; $('mockTtsReplies').disabled = true;
+  }
+})();
+
+// Persist mock settings
+['mockDuration','mockSource','mockTtsEnabled','mockSttEnabled','mockTtsReplies'].forEach(k => {
+  const el = $(k);
+  if (!el) return;
+  const stored = localStorage.getItem('mock_' + k);
+  if (stored !== null) {
+    if (el.type === 'checkbox') el.checked = stored === '1';
+    else el.value = stored;
+  }
+  el.addEventListener('change', () => {
+    localStorage.setItem('mock_' + k, el.type === 'checkbox' ? (el.checked ? '1' : '0') : el.value);
+    if (k === 'mockSource') $('mockCompanyRow').style.display = el.value === 'company' ? '' : 'none';
+  });
+});
+$('mockCompanyRow').style.display = $('mockSource').value === 'company' ? '' : 'none';
+
+// Populate company/role selects (reuse main lists)
+function populateMockCompany() {
+  const cs = $('mockCompanySelect');
+  cs.innerHTML = COMPANIES.map(c => `<option value="${c}">${c}</option>`).join('');
+  const ps = $('mockPositionSelect');
+  ps.innerHTML = POSITIONS.map(p => `<option value="${p}">${p}</option>`).join('');
+}
+populateMockCompany();
+
+$('startMockBtn').addEventListener('click', startMockInterview);
+$('mockEndBtn').addEventListener('click', () => endMockInterview('manual'));
+$('mockReplayBtn').addEventListener('click', () => {
+  if (currentProblem) speak(currentProblem.scenario);
+});
+$('mockMicBtn').addEventListener('click', toggleListening);
+
+// ----- TTS -----
+function speak(text, opts = {}) {
+  if (!ttsAvailable || !mockState.ttsEnabled) return;
+  if (!text) return;
+  speechSynthesis.cancel(); // stop any in-flight utterance
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.rate = 1.0;
+  utter.pitch = 1.0;
+  utter.lang = 'en-US';
+  if (opts.onend) utter.onend = opts.onend;
+  speechSynthesis.speak(utter);
+}
+function stopSpeaking() {
+  if (ttsAvailable) speechSynthesis.cancel();
+}
+
+// ----- STT -----
+function setupRecognition() {
+  if (!sttAvailable) return null;
+  const rec = new SpeechRecognition();
+  rec.continuous = true;
+  rec.interimResults = true;
+  rec.lang = 'en-US';
+  let finalTranscript = '';
+  rec.onresult = (e) => {
+    let interim = '';
+    finalTranscript = '';
+    for (let i = 0; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) finalTranscript += t + ' ';
+      else interim += t;
+    }
+    const chatInput = $('chatInput');
+    chatInput.value = (finalTranscript + interim).trim();
+    $('mockMicStatus').textContent = interim ? 'listening: "' + interim.slice(-40) + '"' : finalTranscript ? 'captured' : 'listening…';
+  };
+  rec.onerror = (e) => {
+    console.warn('Speech recognition error:', e.error);
+    $('mockMicStatus').textContent = 'mic error: ' + e.error;
+    mockState.listening = false;
+    $('mockMicBtn').classList.remove('listening');
+  };
+  rec.onend = () => {
+    mockState.listening = false;
+    $('mockMicBtn').classList.remove('listening');
+    // Auto-send if there's a final transcript
+    const txt = $('chatInput').value.trim();
+    if (txt) {
+      $('mockMicStatus').textContent = 'sending…';
+      sendChatMessage();
+      setTimeout(() => { $('mockMicStatus').textContent = ''; }, 1500);
+    } else {
+      $('mockMicStatus').textContent = '';
+    }
+  };
+  return rec;
+}
+
+function toggleListening() {
+  if (!sttAvailable || !mockState.sttEnabled) return;
+  if (mockState.listening) {
+    mockState.recognition?.stop();
+  } else {
+    if (!mockState.recognition) mockState.recognition = setupRecognition();
+    if (!mockState.recognition) return;
+    try {
+      $('chatInput').value = '';
+      $('mockMicStatus').textContent = 'listening…';
+      mockState.recognition.start();
+      mockState.listening = true;
+      $('mockMicBtn').classList.add('listening');
+    } catch (e) {
+      console.warn('Could not start recognition:', e);
+      $('mockMicStatus').textContent = 'mic blocked — check permissions';
+    }
+  }
+}
+
+// ----- Mock state machine -----
+
+async function startMockInterview() {
+  if (mockState.active) return;
+  await dbReady;
+  if (!getApiKey()) {
+    alert(`Add your ${getProviderName()} API key — the interviewer needs it to generate the problem and answer questions.`);
+    return;
+  }
+
+  mockState.durationMin = parseInt($('mockDuration').value, 10) || 20;
+  mockState.ttsEnabled = $('mockTtsEnabled').checked && ttsAvailable;
+  mockState.sttEnabled = $('mockSttEnabled').checked && sttAvailable;
+  mockState.ttsRepliesEnabled = $('mockTtsReplies').checked && ttsAvailable;
+
+  $('startMockBtn').disabled = true;
+  $('mockStatus').innerHTML = '<span class="loading"><span class="spinner"></span>Generating mock problem…</span>';
+
+  const source = $('mockSource').value;
+  let prompt;
+  if (source === 'company') {
+    const company = $('mockCompanySelect').value;
+    const position = $('mockPositionSelect').value;
+    prompt = buildCompanyPrompt(company, position);
+  } else {
+    prompt = `Generate a single SQL interview problem of medium-to-hard difficulty. Pick a realistic business domain and produce a problem that requires meaningful SQL technique (window functions, CTEs, sessionization, etc.). Make the problem self-contained.`;
+  }
+
+  if (activeAbort) activeAbort.abort();
+  const ctrl = new AbortController();
+  activeAbort = ctrl;
+
+  try {
+    const problem = await callClaude(prompt, ctrl.signal);
+    if (ctrl.signal.aborted) return;
+    resetAttemptTracking();
+    currentReviewItemId = null;
+    await dropCurrentTables();
+    currentProblem = problem;
+    mockState.problemSnapshot = problem;
+    chatHistory = [];
+    await buildDatabase(problem);
+    await renderProblem(problem);
+    $('checkBtn').disabled = false;
+
+    // Switch chat panel into interviewer mode
+    $('chatMessages').innerHTML = '<div class="chat-empty">🎙 Mock interview started. Talk through your approach with the mic, or type clarifying questions here.</div>';
+
+    // Start timer
+    mockState.active = true;
+    mockState.startedAt = Date.now();
+    mockState.endsAt = Date.now() + mockState.durationMin * 60 * 1000;
+    mockState.warned5 = false;
+    mockState.warned1 = false;
+    $('mockBar').style.display = 'flex';
+    tickTimer();
+    mockState.tickHandle = setInterval(tickTimer, 1000);
+
+    // Auto-switch to Generate tab so editor + scenario are visible
+    switchTab('generate');
+
+    // Speak the intro
+    const intro = `Welcome. You have ${mockState.durationMin} minutes for this problem. Here is the scenario. ${problem.scenario}`;
+    if (mockState.ttsEnabled) {
+      setTimeout(() => speak(intro), 300);
+    }
+
+    // Disable mic button if STT off
+    $('mockMicBtn').disabled = !mockState.sttEnabled;
+    if (!mockState.sttEnabled) $('mockMicBtn').classList.add('disabled');
+    $('mockReplayBtn').disabled = !mockState.ttsEnabled;
+    if (!mockState.ttsEnabled) $('mockReplayBtn').classList.add('disabled');
+
+    $('mockStatus').innerHTML = '<span class="success">Interview in progress. Good luck.</span>';
+  } catch (e) {
+    if (e.name !== 'AbortError') {
+      $('mockStatus').innerHTML = `<div class="error">${escapeHtml(e.message)}</div>`;
+    }
+    $('startMockBtn').disabled = false;
+  } finally {
+    if (activeAbort === ctrl) activeAbort = null;
+  }
+}
+
+function tickTimer() {
+  if (!mockState.active) return;
+  const remaining = mockState.endsAt - Date.now();
+  const el = $('mockTimer');
+  if (remaining <= 0) {
+    el.textContent = '00:00';
+    endMockInterview('timeout');
+    return;
+  }
+  const mins = Math.floor(remaining / 60000);
+  const secs = Math.floor((remaining % 60000) / 1000);
+  el.textContent = `${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
+  el.classList.remove('warning', 'danger');
+  if (remaining <= 60_000) el.classList.add('danger');
+  else if (remaining <= 300_000) el.classList.add('warning');
+
+  // 5-min warning
+  if (!mockState.warned5 && remaining <= 5 * 60_000) {
+    mockState.warned5 = true;
+    if (mockState.ttsEnabled) speak('Five minutes remaining.');
+  }
+  // 1-min warning
+  if (!mockState.warned1 && remaining <= 60_000) {
+    mockState.warned1 = true;
+    if (mockState.ttsEnabled) speak('One minute left.');
+  }
+}
+
+async function endMockInterview(reason) {
+  if (!mockState.active) return;
+  mockState.active = false;
+  clearInterval(mockState.tickHandle);
+  mockState.tickHandle = null;
+  if (mockState.recognition && mockState.listening) {
+    try { mockState.recognition.stop(); } catch {}
+  }
+  stopSpeaking();
+  $('mockBar').style.display = 'none';
+  $('mockMicBtn').classList.remove('listening');
+  $('startMockBtn').disabled = false;
+
+  const elapsedMs = Date.now() - mockState.startedAt;
+  const usedMin = (elapsedMs / 60000).toFixed(1);
+  const userSql = getSql();
+
+  // Show modal with loading critique
+  showMockEndModal({
+    reason,
+    durationMin: mockState.durationMin,
+    usedMin,
+    userSql,
+    problem: mockState.problemSnapshot,
+    critique: null
+  });
+
+  // Async fetch critique
+  if (getApiKey() && userSql) {
+    requestCritique(mockState.problemSnapshot, userSql, elapsedMs).then(critique => {
+      const div = document.getElementById('mockCritiqueText');
+      if (div) div.innerHTML = formatChatContent(critique);
+    }).catch(e => {
+      const div = document.getElementById('mockCritiqueText');
+      if (div) div.innerHTML = `<span style="color: var(--red);">Critique unavailable: ${escapeHtml(e.message)}</span>`;
+    });
+  } else {
+    const div = document.getElementById('mockCritiqueText');
+    if (div) div.innerHTML = '<span style="color: var(--text-dim);">No SQL written — nothing to critique.</span>';
+  }
+}
+
+function showMockEndModal({ reason, durationMin, usedMin, userSql, problem }) {
+  const reasonLabel = reason === 'timeout' ? "⏱ Time's up!" : reason === 'manual' ? '🏁 Interview ended early' : '🏁 Interview complete';
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.id = 'mockEndModal';
+  backdrop.innerHTML = `
+    <div class="modal-card">
+      <h2>${reasonLabel}</h2>
+      <div class="summary-grid">
+        <div class="summary-stat">
+          <div class="label">Time used</div>
+          <div class="value">${escapeHtml(usedMin)}/${durationMin}m</div>
+        </div>
+        <div class="summary-stat">
+          <div class="label">Hints opened</div>
+          <div class="value">${currentAttemptHintsUsed}/3</div>
+        </div>
+        <div class="summary-stat">
+          <div class="label">Wrote SQL</div>
+          <div class="value">${userSql ? '✓' : '—'}</div>
+        </div>
+      </div>
+      <div style="font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 14px;">Interviewer feedback</div>
+      <div class="critique" id="mockCritiqueText">
+        <span class="loading"><span class="spinner"></span>Generating feedback…</span>
+      </div>
+      <div class="modal-actions">
+        <button id="mockSaveReviewBtn" class="secondary">Save to review queue</button>
+        <button id="mockCloseBtn">Close</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+  document.getElementById('mockCloseBtn').addEventListener('click', () => backdrop.remove());
+  document.getElementById('mockSaveReviewBtn').addEventListener('click', () => {
+    ensureCurrentSavedToReview();
+    recordAttemptOutcome(userSql ? 'incorrect' : 'gave-up');
+    document.getElementById('mockSaveReviewBtn').textContent = '✓ Saved';
+    document.getElementById('mockSaveReviewBtn').disabled = true;
+  });
+}
+
+async function requestCritique(problem, userSql, elapsedMs) {
+  const minutes = (elapsedMs / 60000).toFixed(1);
+  const system = `You are a senior data interviewer giving constructive post-interview feedback. The candidate just attempted a SQL problem in a timed mock. Be honest, specific, and brief — 4–6 short bullet points covering: correctness vs reference, code quality (readability, naming, structure), efficiency / approach, communication style if you saw chat messages, and what to practice next. No fluff, no preamble.`;
+
+  const conversationSummary = chatHistory.length
+    ? chatHistory.map(m => `${m.role === 'user' ? 'Candidate' : 'Interviewer'}: ${m.content}`).join('\n')
+    : '(No verbal/chat exchange during the interview.)';
+
+  const userMsg = `## Scenario
+${problem.scenario}
+
+## Reference solution
+\`\`\`sql
+${problem.solution}
+\`\`\`
+
+## Candidate's final query
+\`\`\`sql
+${userSql || '(no query written)'}
+\`\`\`
+
+## Time used
+${minutes} of ${mockState.durationMin} allotted minutes
+
+## Conversation during interview
+${conversationSummary}
+
+Give your post-mortem.`;
+
+  return await callLLM({ system, messages: [{ role: 'user', content: userMsg }], maxTokens: 700 });
+}
+
+// ===== Interviewer-persona chat =====
+// Hook into the existing chat: while a mock is active, swap the system prompt
+// so the AI behaves like an interviewer (won't just hand over the answer).
+const origCallChatClaude = callChatClaude;
+callChatClaude = async function() {
+  if (!mockState.active) return await origCallChatClaude();
+
+  const userSql = getSql() || '(none yet)';
+  const tableInfo = currentProblem.tables.map(t => t.createSql).join('\n\n');
+  const systemPrompt = `You are conducting a live SQL technical interview. Stay in character as an interviewer. Keep replies SHORT (1–3 sentences typically).
+
+Behaviors:
+- If the candidate asks a clarifying question about the problem, answer factually and helpfully (you can disclose schema details, edge case handling expectations, or what 'correct' looks like) — but don't volunteer the solution.
+- If the candidate is talking through their approach out loud, give a short acknowledgement, ask a probing follow-up question, or push back on weak reasoning.
+- If they're stuck, give a tiny nudge (NOT the answer). Encourage them to think out loud.
+- If they propose a wrong approach, ask a question that exposes the problem ("what happens if there are duplicates?") rather than just saying it's wrong.
+- Never write the SQL solution for them. Never reveal the reference query.
+- Speak naturally — no markdown headers, no bullet lists. This is being read aloud.
+
+The problem they're working on:
+${currentProblem.scenario}
+
+Tables:
+${tableInfo}
+
+Their query so far:
+${userSql}`;
+
+  const reply = await callLLM({
+    system: systemPrompt,
+    messages: chatHistory,
+    maxTokens: 350
+  });
+
+  // Speak the reply aloud if enabled
+  if (mockState.ttsRepliesEnabled) speak(reply);
+
+  return reply;
+};
 </script>
 <script data-goatcounter="https://rebelstats.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 </body>
