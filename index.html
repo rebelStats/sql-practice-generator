@@ -2289,14 +2289,34 @@ async function startMockInterview() {
   $('mockStatus').innerHTML = '<span class="loading"><span class="spinner"></span>Generating mock problem…</span>';
 
   const source = $('mockSource').value;
-  let prompt;
+  let basePrompt;
   if (source === 'company') {
     const company = $('mockCompanySelect').value;
     const position = $('mockPositionSelect').value;
-    prompt = buildCompanyPrompt(company, position);
+    basePrompt = buildCompanyPrompt(company, position);
   } else {
-    prompt = `Generate a single SQL interview problem of medium-to-hard difficulty. Pick a realistic business domain and produce a problem that requires meaningful SQL technique (window functions, CTEs, sessionization, etc.). Make the problem self-contained.`;
+    basePrompt = `Generate a single SQL interview problem of medium-to-hard difficulty. Pick a realistic business domain and produce a problem that requires meaningful SQL technique (window functions, CTEs, sessionization, etc.).`;
   }
+  const prompt = `${basePrompt}
+
+== MOCK INTERVIEW FORMATTING (critical) ==
+
+This problem is for a TIMED MOCK INTERVIEW. Phrase the SCENARIO the way a real interviewer would say it OUT LOUD — conversational, business-flavored, slightly underspecified. Do NOT write a perfectly precise problem statement.
+
+Build in 2-4 STRATEGIC AMBIGUITIES that a strong candidate would identify and ask about. Examples of useful ambiguity:
+- Don't define what "active", "engaged", "successful", "churned", "completed" mean — leave it to the candidate to ask
+- Use vague time framing like "recently", "this period", "in the last while" instead of concrete windows
+- Don't specify how to handle: NULLs, duplicates, deleted users, cancelled orders, ties, edge cases
+- Don't specify whether to dedupe, whether to include in-flight events, what timezone, etc.
+- Don't specify what shape the output should be (one row per X? a single number? aggregated? per-group?)
+
+The scenario should sound like 2-4 sentences of conversational interviewer speech, not a clean problem spec. End with something open like "How would you approach that?" or "Walk me through how you'd write that query."
+
+Make the SCHEMA real and complete (so the data exists), but the VERBAL PROBLEM should leave room for the candidate to clarify.
+
+The "solution" you produce reflects ONE reasonable set of assumptions; document those assumptions implicitly in the SQL (using CTE names, comments where helpful).
+
+The "hints" array should be tiered as usual, BUT make Hint 1 explicitly about the clarifying questions to ask first — list 3-5 good clarifying questions a strong candidate would ask before writing any SQL.`;
 
   if (activeAbort) activeAbort.abort();
   const ctrl = new AbortController();
@@ -2331,8 +2351,8 @@ async function startMockInterview() {
     // Auto-switch to Generate tab so editor + scenario are visible
     switchTab('generate');
 
-    // Speak the intro
-    const intro = `Welcome. You have ${mockState.durationMin} minutes for this problem. Here is the scenario. ${problem.scenario}`;
+    // Speak the intro — invite clarifying questions explicitly
+    const intro = `Welcome. You have ${mockState.durationMin} minutes. Here's the problem: ${problem.scenario} Take a moment to think about it. Feel free to ask any clarifying questions before you start writing SQL — that's part of what I'm evaluating.`;
     if (mockState.ttsEnabled) {
       setTimeout(() => speak(intro), 300);
     }
@@ -2507,24 +2527,50 @@ callChatClaude = async function() {
 
   const userSql = getSql() || '(none yet)';
   const tableInfo = currentProblem.tables.map(t => t.createSql).join('\n\n');
-  const systemPrompt = `You are conducting a live SQL technical interview. Stay in character as an interviewer. Keep replies SHORT (1–3 sentences typically).
+  const turnsSoFar = chatHistory.length;
+  const candidateAskedAnything = chatHistory.some(m => m.role === 'user');
 
-Behaviors:
-- If the candidate asks a clarifying question about the problem, answer factually and helpfully (you can disclose schema details, edge case handling expectations, or what 'correct' looks like) — but don't volunteer the solution.
-- If the candidate is talking through their approach out loud, give a short acknowledgement, ask a probing follow-up question, or push back on weak reasoning.
-- If they're stuck, give a tiny nudge (NOT the answer). Encourage them to think out loud.
-- If they propose a wrong approach, ask a question that exposes the problem ("what happens if there are duplicates?") rather than just saying it's wrong.
-- Never write the SQL solution for them. Never reveal the reference query.
-- Speak naturally — no markdown headers, no bullet lists. This is being read aloud.
+  const systemPrompt = `You are conducting a live SQL technical interview. Stay in character. Keep replies SHORT — 1–3 sentences, max 4. This is being read aloud, so write conversationally — no markdown, no bullet lists, no code blocks unless absolutely needed.
 
-The problem they're working on:
+THE PROBLEM (deliberately underspecified — that's by design):
 ${currentProblem.scenario}
 
-Tables:
+THE FULL SCHEMA (you may reveal column names, types, and what data each table contains when asked):
 ${tableInfo}
 
-Their query so far:
-${userSql}`;
+THEIR QUERY SO FAR:
+${userSql}
+
+CANDIDATE BEHAVIOR SO FAR: ${candidateAskedAnything ? 'They have spoken/asked at least once.' : 'They have NOT asked any clarifying questions yet.'}
+
+YOUR BEHAVIORS:
+
+When the candidate asks a CLARIFYING QUESTION:
+- Reward it briefly ("good question") then give a SPECIFIC, definitive answer. This is critical — don't be vague back at them. State the exact assumption they should use. Examples:
+  - "What counts as active?" → "Let's say active means at least one event in the last 30 days."
+  - "How do we handle NULLs?" → "Treat them as absent; exclude from the result."
+  - "What's the output shape?" → "One row per user, with the columns user_id, total_events, last_active."
+- The schema details, business rules, and edge case handling are yours to define on the fly. Be decisive.
+
+When the candidate explains their approach out loud:
+- Acknowledge briefly, then ask ONE probing follow-up. ("Right — and what happens when a user has zero matching rows?")
+- If their reasoning is solid, just confirm and let them keep going.
+- If their reasoning has a flaw, expose it via a question, don't just point it out.
+
+When the candidate is silent / stuck (you can tell because their query hasn't changed):
+- If it's been a while and they HAVEN'T asked any clarifying questions: prompt them. "Before you start writing SQL, are there any assumptions you'd want to clarify?"
+- Otherwise, give a TINY nudge framed as a question, not an answer. Never write the solution for them.
+
+When they propose a wrong approach:
+- Ask a question that exposes the problem ("what if a user shows up in both tables?") rather than telling them they're wrong.
+
+NEVER:
+- Write the reference SQL solution for them.
+- Reveal the contents of the "solution" field.
+- Give long-winded explanations. Always SHORT.
+- Use markdown headers, bullet lists, or formatting — this is spoken dialogue.
+
+${turnsSoFar === 0 && !candidateAskedAnything ? 'NOTE: This is the very first turn. If they didn\'t ask a clarifying question, prompt: "Any clarifying questions before you dive in?"' : ''}`;
 
   const reply = await callLLM({
     system: systemPrompt,
